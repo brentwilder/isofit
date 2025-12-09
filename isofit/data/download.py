@@ -227,5 +227,5 @@ def preview_paths():
         - examples = /different/path/examples
     """
     print("Download paths will default to:")
-    for key, path in env.items("dirs"):
+    for key, path in env.items():
         print(f"- {key} = {path}")

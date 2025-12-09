@@ -21,7 +21,6 @@ from __future__ import annotations
 import datetime
 import logging
 import os
-import time
 from copy import deepcopy
 from pathlib import Path
 
@@ -31,9 +30,7 @@ import numpy as np
 import yaml
 from scipy.interpolate import interp1d
 
-from isofit import ray
-from isofit.core import units
-from isofit.core.common import calculate_resample_matrix, resample_spectrum
+from isofit.core.common import resample_spectrum
 from isofit.radiative_transfer import luts
 from isofit.radiative_transfer.engines import SixSRT
 from isofit.radiative_transfer.radiative_transfer_engine import RadiativeTransferEngine
@@ -42,48 +39,30 @@ Logger = logging.getLogger(__file__)
 
 
 class tfLikeModel:
-    def __init__(self, input_file=None, key=None, layer_read=True):
-        if input_file is not None and key is None:
-            self.input_file = input_file
-            model = h5py.File(input_file, "r")
+    def __init__(self, input_file):
+        self.weights = []
+        self.biases = []
+        self.input_file = input_file
+        self.model = h5py.File(input_file, "r")
 
-            weights = []
-            biases = []
-            for n in model["model_weights"].keys():
-                if "dense" in n:
-                    if "kernel:0" in model["model_weights"][n][n]:
-                        weights.append(
-                            np.array(model["model_weights"][n][n]["kernel:0"])
-                        )
-                        biases.append(np.array(model["model_weights"][n][n]["bias:0"]))
-                    else:
-                        weights.append(np.array(model["model_weights"][n][n]["kernel"]))
-                        biases.append(np.array(model["model_weights"][n][n]["bias"]))
+        weights = []
+        biases = []
+        for _n, n in enumerate(self.model["model_weights"].keys()):
+            if "dense" in n:
+                if "kernel:0" in self.model["model_weights"][n][n]:
+                    weights.append(
+                        np.array(self.model["model_weights"][n][n]["kernel:0"])
+                    )
+                    biases.append(np.array(self.model["model_weights"][n][n]["bias:0"]))
+                else:
+                    weights.append(
+                        np.array(self.model["model_weights"][n][n]["kernel"])
+                    )
+                    biases.append(np.array(self.model["model_weights"][n][n]["bias"]))
 
-            self.weights = weights
-            self.biases = biases
-            self.input_file = input_file
-
-        else:
-            if layer_read:
-                self.input_file = input_file
-                self.key = key
-                with h5py.File(input_file, "r") as model:
-                    self.layers = len(model[f"weights_{key}"])
-
-            else:
-                model = h5py.File(input_file, "r")
-                model[f"weights_{key}"].keys()
-                with h5py.File(input_file, "r") as model:
-                    self.layers = len(model[f"weights_{key}"])
-                    self.weights = [
-                        model[f"weights_{key}"][layer][:]
-                        for layer in model[f"weights_{key}"].keys()
-                    ]
-                    self.biases = [
-                        model[f"biases_{key}"][layer][:]
-                        for layer in model[f"biases_{key}"].keys()
-                    ]
+        self.weights = weights
+        self.biases = biases
+        self.input_file = input_file
 
     def leaky_re_lu(self, x, alpha=0.4):
         return np.maximum(alpha * x, x)
@@ -96,49 +75,6 @@ class tfLikeModel:
             if i < len(self.weights) - 1:
                 xi = self.leaky_re_lu(yi)
         return yi
-
-    def load_arrays(self, i):
-        weights = h5py.File(self.input_file, "r")[f"weights_{self.key}"]
-        biases = h5py.File(self.input_file, "r")[f"biases_{self.key}"]
-
-        layer = weights[f"layer_{i}"]
-        offset = layer.id.get_offset()
-        weight = np.memmap(
-            self.input_file,
-            layer.dtype,
-            "r",
-            offset=offset,
-            shape=layer.shape,
-        )
-
-        layer = biases[f"layer_{i}"]
-        offset = layer.id.get_offset()
-        bias = np.memmap(
-            self.input_file,
-            layer.dtype,
-            "r",
-            offset=offset,
-            shape=layer.shape,
-        )
-
-        return weight, bias
-
-
-@ray.remote(num_cpus=1)
-def ray_predict(model, x, layer_read=True):
-    xi = x.copy()
-    for i in range(model.layers):
-        if layer_read:
-            M, b = model.load_arrays(i)
-        else:
-            M, b = model.weights[i], model.biases[i]
-
-        yi = np.dot(xi, M) + b
-
-        # apply leaky_relu unless we're at the output layer
-        if i < model.layers - 1:
-            xi = model.leaky_re_lu(yi)
-    return yi
 
 
 class SimulatedModtranRT(RadiativeTransferEngine):
@@ -153,22 +89,11 @@ class SimulatedModtranRT(RadiativeTransferEngine):
     lut_quantities = {
         "rhoatm",
         "sphalb",
-        "transm_down_dir",
+        "transm_down_difs",
         "transm_down_dif",  # NOTE: Formerly transm
-        "transm_up_dif",
+        "transm_up_difs",
         "transm_up_dir",  # NOTE: Formerly transup
     }
-    aux_quantities = {
-        "lut_names": str,
-        "feature_point_names": str,
-        "rt_quantities": str,
-        "solar_irr": np.float64,
-        "emulator_wavelengths": np.float64,
-        "simulator_wavelengths": np.float64,
-        "response_scaler": dict,
-        "response_offset": dict,
-    }
-    _disable_makeSim = True
 
     def preSim(self):
         """
@@ -180,45 +105,21 @@ class SimulatedModtranRT(RadiativeTransferEngine):
         # Create a copy of the engine_config and populate it with 6S parameters
         config = build_sixs_config(self.engine_config)
 
-        # Get the component mode up front
-        if self.engine_config.emulator_file.endswith(".h5"):
-            self.component_mode = "3c"
-
-        elif self.engine_config.emulator_file.endswith(".6c"):
-            self.component_mode = "6c"
-
-        else:
-            raise ValueError(
-                f"Invalid extension for emulator aux file. Use .npz or .6c"
-            )
-
-        # Pack the emulator Aux the same regardless of input file type.
-        # Enforce types
-        if self.component_mode == "3c":
-            aux = dict(np.load(config.emulator_aux_file, allow_pickle=True))
-            aux_dict = {}
-            for key, value in self.aux_quantities.items():
-                if len(aux.get(key, [])):
-                    aux_dict[key] = aux.get(key)
-
-            aux = aux_dict
-
-        else:
-            aux = {}
-            with h5py.File(config.emulator_file, "r") as model:
-                for key, value in self.aux_quantities.items():
-                    if value == dict:
-                        aux[key] = {
-                            model_: model[key][model_][:].astype(np.float64)
-                            for model_ in model[key].keys()
-                        }
-                    else:
-                        aux[key] = model[key][:].astype(value)
+        # Emulator Aux
+        aux = np.load(config.emulator_aux_file)
 
         # TODO: Disable when sRTMnet_v120_aux is updated
         aux_rt_quantities = np.where(
             aux["rt_quantities"] == "transm", "transm_down_dif", aux["rt_quantities"]
-        ).astype(str)
+        )
+
+        # TODO: Re-enable when sRTMnet_v120_aux is updated
+        # Verify expected keys exist
+        # missing = self.lut_quantities - set(aux["rt_quantities"].tolist())
+        # if missing:
+        #     raise AttributeError(
+        #         f"Emulator Aux rt_quantities does not contain the following required keys: {missing}"
+        #     )
 
         # Emulator keys (sRTMnet)
         self.emu_wl = aux["emulator_wavelengths"]
@@ -258,131 +159,30 @@ class SimulatedModtranRT(RadiativeTransferEngine):
         sixs = sim.lut[aux_rt_quantities]
         resample = sixs.interp({"wl": aux["emulator_wavelengths"]})
 
+        # Stack the quantities together along a new dimension named `quantity`
+        resample = resample.to_array("quantity").stack(stack=["quantity", "wl"])
+
+        ## Reduce from 3D to 2D by stacking along the wavelength dim for each quantity
+        # Convert to DataArray to stack the variables along a new `quantity` dimension
+        data = sixs.to_array("quantity").stack(stack=["quantity", "wl"])
+
+        scaler = aux.get("response_scaler", 100.0)
+
+        # Now predict, scale, and add the interpolations
+        Logger.info("Loading and predicting with emulator")
+        emulator = tfLikeModel(self.engine_config.emulator_file)
+        predicts = da.from_array(emulator.predict(data))
+        predicts /= scaler
+        predicts += resample
+
+        # Unstack back to a dataset and save
+        predicts = predicts.unstack("stack").to_dataset("quantity")
+
         self.predict_path = os.path.join(
             self.engine_config.sim_path, "sRTMnet.predicts.nc"
         )
-        if os.path.exists(self.predict_path):
-            Logger.info(f"Loading sRTMnet predicts from: {self.predict_path}")
-            predicts = luts.load(self.predict_path, mode="r")
-            self.component_mode = predicts.attrs.get("component_mode", "3c")
-
-        else:
-            Logger.info("Loading and predicting with emulator")
-            if self.component_mode == "3c":
-                Logger.debug("Detected hdf5 (3c) emulator file format")
-
-                # Stack the quantities together along a new dimension
-                # named `quantity`
-                resample = resample.to_array("quantity").stack(stack=["quantity", "wl"])
-
-                ## Reduce from 3D to 2D by stacking along the wavelength
-                # dim for each quantity. Convert to DataArray to stack
-                # the variables along a new `quantity` dimension
-                data = sixs.to_array("quantity").stack(stack=["quantity", "wl"])
-
-                scaler = aux.get("response_scaler", 100.0)
-                response_offset = aux.get("response_offset", 0.0)
-
-                # Now predict, scale, and add the interpolations
-                emulator = tfLikeModel(self.engine_config.emulator_file)
-                predicts = da.from_array(emulator.predict(data))
-                predicts /= scaler
-                predicts += response_offset
-                predicts += resample
-
-                # Unstack back to a dataset and save
-                predicts = predicts.unstack("stack").to_dataset("quantity")
-                predicts.attrs["component_mode"] = "3c"
-
-            else:
-                Logger.debug("Detected 6c emulator file format")
-
-                # This is an array of feature points tacked onto the interpolated 6s values
-                feature_point_names = aux["feature_point_names"].astype(str).tolist()
-                if len(feature_point_names) > 0 and feature_point_names[0] != "None":
-
-                    # Populate the 6S parameter values from a modtran template file
-                    with open(self.engine_config.template_file, "r") as file:
-                        data = yaml.safe_load(file)["MODTRAN"][0]["MODTRANINPUT"]
-
-                    add_vector = np.zeros(
-                        (self.points.shape[0], len(feature_point_names))
-                    )
-                    for _fpn, fpn in enumerate(feature_point_names):
-                        if fpn in self.lut_names:
-                            add_vector[:, feature_point_names.index(fpn)] = self.points[
-                                :, self.lut_names.index(fpn)
-                            ]
-                        elif fpn == "H2OSTR":
-                            add_vector[:, _fpn] = 2.5
-                            Logger.warning(f"Using default const H2OSTR of 2.5 g/cm2.")
-                        elif fpn == "AERFRAC_2" or fpn == "AOT550":
-                            add_vector[:, _fpn] = 0.06
-                            Logger.warning(f"Using default const AOD of 0.06.")
-                        elif fpn == "observer_altitude_km":
-                            add_vector[:, _fpn] = data["GEOMETRY"]["H1ALT"]
-                        elif fpn == "surface_elevation_km":
-                            add_vector[:, _fpn] = data["SURFACE"]["GNDALT"]
-                        else:
-                            raise ValueError(f"Feature point {fpn} not found in points")
-
-                predicts = resample.copy(deep=True)
-
-                total_start_time = time.time()
-                for key in aux_rt_quantities:
-                    key_start_time = time.time()
-                    Logger.debug(f"Loading emulator {key}")
-
-                    emulator = tfLikeModel(
-                        input_file=self.engine_config.emulator_file,
-                        key=key,
-                        layer_read=self.engine_config.parallel_layer_read,
-                    )
-
-                    Logger.info(f"Emulating {key}")
-                    if (
-                        len(feature_point_names) > 0
-                        and feature_point_names[0] != "None"
-                    ):
-                        data = np.hstack((sixs[key].values, add_vector))
-                    else:
-                        data = sixs[key].values
-
-                    # run predictions
-                    n_chunks = self.engine_config.predict_parallel_chunks
-                    data_chunks = np.array_split(data, n_chunks, axis=0)
-
-                    model_ref = ray.put(emulator)
-                    result_refs = [
-                        ray_predict.remote(
-                            model_ref, x, self.engine_config.parallel_layer_read
-                        )
-                        for x in data_chunks
-                    ]
-
-                    lp = np.concatenate(ray.get(result_refs), axis=0)
-                    Logger.debug(f"Cleanup {key}")
-                    lp /= aux["response_scaler"][key]
-                    lp += aux["response_offset"][key]
-
-                    ltz = resample[key].values + lp < 0
-                    lp[ltz] = -1 * resample[key].values[ltz]
-
-                    predicts[key] = resample[key] + lp
-
-                    elapsed_time = time.time() - key_start_time
-                    Logger.debug(f"Predict time ({key}): {elapsed_time} seconds")
-                    del result_refs, model_ref, emulator
-
-                predicts.attrs["component_mode"] = "6c"
-
-                elapsed_time = time.time() - total_start_time
-                Logger.info(f"Total prediction: {elapsed_time} seconds")
-
-            Logger.info(
-                f"Saving intermediary prediction results to: {self.predict_path}"
-            )
-            luts.saveDataset(self.predict_path, predicts)
+        Logger.info(f"Saving intermediary prediction results to: {self.predict_path}")
+        luts.saveDataset(self.predict_path, predicts)
 
         # Convert our irradiance to date 0 then back to current date
         # sc - If statement to make sure tsis solar model is used if supplied
@@ -397,10 +197,6 @@ class SimulatedModtranRT(RadiativeTransferEngine):
         irr_ref = sim.esd[200, 1]  # Irradiance factor
         irr_cur = sim.esd[sim.day_of_year - 1, 1]  # Factor for current date
         sol_irr = sol_irr * irr_ref**2 / irr_cur**2
-
-        self.emulator_sol_irr = sol_irr
-        self.emulator_coszen = sim["coszen"]
-        self.emulator_H = calculate_resample_matrix(self.emu_wl, self.wl, self.fwhm)
 
         # Insert these into the LUT file
         return {
@@ -420,49 +216,24 @@ class SimulatedModtranRT(RadiativeTransferEngine):
         """
         Resamples the predicts produced by preSim to be saved in self.lut_path
         """
-        return {}
+        # REVIEW: Likely should chunk along the point dim to improve this
+        data = luts.load(self.predict_path, mode="r").sel(point=tuple(point)).load()
+        return {
+            key: resample_spectrum(values.data, self.emu_wl, self.wl, self.fwhm)
+            for key, values in data.items()
+            if values.data.dtype != "int64"
+        }
 
-    def postSim(self):
-        """
-        Post-simulation adjustments for sRTMnet.
-        """
-        # Update engine to run in RDN mode
-        data = luts.load(self.predict_path, mode="r")
-        outdict = {}
-        Logger.debug("Resampling components")
-        for key, values in data.items():
-            Logger.debug(f"Resampling {key}")
-            if (
-                key in ["dir-dir", "dir-dif", "dif-dir", "dif-dif", "rhoatm"]
-                and self.component_mode == "6c"
-            ):
-                fullspec_val = units.transm_to_rdn(
-                    data[key].data, self.emulator_coszen, self.emulator_sol_irr
-                )
-            else:
-                fullspec_val = data[key].data
+    def get_L_atm(self, x_RT, geom):
+        r = self.get(x_RT, geom)
+        rho = r["rhoatm"]
+        rdn = rho / np.pi * (self.solar_irr * self.coszen)
+        return rdn
 
-            # Only resample and store valid keys
-            if len(data[key].data.shape) > 0:
-                outdict[key] = resample_spectrum(
-                    fullspec_val, self.emu_wl, self.wl, self.fwhm, H=self.emulator_H
-                )
-
-        Logger.debug("Setting up lut cache")
-        for _point, point in enumerate(data["point"].values):
-            self.lut.queuePoint(
-                np.array(point),
-                {key: outdict[key][_point, :] for key in outdict.keys()},
-            )
-        Logger.debug("Flushing lut to file")
-        self.lut.flush()
-
-        # This is crude - we should revise the LUT naming and store L_* to make this
-        # more explicit
-        if "dir-dir" in outdict:
-            self.rt_mode = "rdn"
-            self.lut.setAttr("RT_mode", "rdn")
-        Logger.debug("Complete")
+    def get_L_down_transmitted(self, x_RT, geom):
+        r = self.get(x_RT, geom)
+        rdn = (self.solar_irr * self.coszen) / np.pi * r["transm"]
+        return rdn
 
 
 def build_sixs_config(engine_config):
@@ -502,6 +273,7 @@ def build_sixs_config(engine_config):
     # Tweak parameter values for sRTMnet
     config.aerosol_model_file = None
     config.aerosol_template_file = None
+    config.emulator_file = None
     config.day = dt.day
     config.month = dt.month
     config.elev = data["SURFACE"]["GNDALT"]
@@ -521,3 +293,13 @@ def build_sixs_config(engine_config):
     config.lut_path = path.parent / f"6S.{path.name}"
 
     return config
+
+
+def recursive_dict_search(indict, key):
+    for k, v in indict.items():
+        if k == key:
+            return v
+        elif isinstance(v, dict):
+            found = self.recursive_dict_search(v, key)
+            if found is not None:
+                return found

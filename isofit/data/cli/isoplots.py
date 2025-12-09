@@ -28,10 +28,7 @@ def install(path=None):
         path = env.plots
 
     print(f"Installing {path}")
-    try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", path])
-    except:
-        print(f"Failed to install isoplots, you may need to do so manually: {path}")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-e", path])
 
 
 def download(path=None, tag="latest", overwrite=False):
@@ -111,7 +108,7 @@ def validate(path=None, checkForUpdate=True, debug=print, error=print, **_):
     if checkForUpdate:
         return isUpToDate(path, debug=debug, error=error)
 
-    debug("[OK] Path is valid")
+    debug("[✓] Path is valid")
     return True
 
 
@@ -151,10 +148,10 @@ def isUpToDate(path=None, tag="latest", debug=print, error=print, **_):
     current = Version(importlib.metadata.version("isoplots"))
 
     if current < latest:
-        error(f"[x] Latest is {latest}, currently installed is {current}")
+        error(f"[x] Latest is {latest}, currently installed is {version}")
         return False
 
-    debug(f"[OK] Path is up to date, current version: {current}")
+    debug(f"[✓] Path is up to date, current version: {current}")
 
     return True
 

@@ -22,39 +22,37 @@ import os
 from typing import OrderedDict
 
 import numpy as np
+import pandas as pd
 from scipy.interpolate import interp1d
 from scipy.optimize import least_squares, minimize
 from scipy.optimize import minimize_scalar as min1d
 
-from isofit.core import units
-from isofit.core.common import emissive_radiance, eps, svd_inv_sqrt
-from isofit.data import env
+from isofit.core.common import (
+    emissive_radiance,
+    eps,
+    get_refractive_index,
+    svd_inv_sqrt,
+)
 
 
 def heuristic_atmosphere(
-    fm: ForwardModel,
-    x_surface: np.array,
+    RT: RadiativeTransfer,
+    instrument: Instrument,
     x_RT: np.array,
     x_instrument: np.array,
     meas: np.array,
     geom: Geometry,
-    wl_lo: int = 865,
-    wl_center: int = 945,
-    wl_hi: int = 1040,
 ):
     """From a given radiance, estimate atmospheric state with band ratios.
     Used to initialize gradient descent inversions.
 
     Args:
-        fm: isofit forward model
-        x_surface: surface portion of the state vector
+        RT: radiative transfer model to use
+        instrument: instrument for noise characterization
         x_RT: radiative transfer portion of the state vector
         x_instrument: instrument portion of the state vector
         meas: a one-D numpy vector of radiance in uW/nm/sr/cm2
         geom: geometry object corresponding to given measurement
-        wl_lo: Low wavelength to use for the continuum removal H2O fit
-        wl_center: Center wavelength to use for the continuum removal H2O fit
-        wl_hi: High wavelength to use for the continuum removal H2O fit
 
     Returns:
         x_new: updated estimate of x_RT
@@ -62,21 +60,18 @@ def heuristic_atmosphere(
 
     # Identify the latest instrument wavelength calibration (possibly
     # state-dependent) and identify channel numbers for the band ratio.
-    wl, fwhm = fm.instrument.calibration(x_instrument)
-    blo = np.argmin(abs(wl - wl_lo))
-    bcenter = np.argmin(abs(wl - wl_center))
-    bhi = np.argmin(abs(wl - wl_hi))
-
-    offset = 5  # nm
-    if not (any(fm.RT.wl > (wl_lo - offset)) and any(fm.RT.wl < (wl_hi + offset))):
+    wl, fwhm = instrument.calibration(x_instrument)
+    b865 = np.argmin(abs(wl - 865))
+    b945 = np.argmin(abs(wl - 945))
+    b1040 = np.argmin(abs(wl - 1040))
+    if not (any(RT.wl > 850) and any(RT.wl < 1050)):
         return x_RT
-
     x_new = x_RT.copy()
 
     # Figure out which RT object we are using
     # TODO: this is currently very specific to vswir-tir 2-mode, eventually generalize
     my_RT = None
-    for rte in fm.RT.rt_engines:
+    for rte in RT.rt_engines:
         if rte.treat_as_emissive is False:
             my_RT = rte
             break
@@ -86,7 +81,7 @@ def heuristic_atmosphere(
     # Band ratio retrieval of H2O.  Depending on the radiative transfer
     # model we are using, this state parameter could go by several names.
     for h2oname in ["H2OSTR", "h2o"]:
-        if h2oname not in fm.RT.statevec_names:
+        if h2oname not in RT.statevec_names:
             continue
 
         # ignore unused names
@@ -94,8 +89,8 @@ def heuristic_atmosphere(
             continue
 
         # find the index in the lookup table associated with water vapor
-        ind_sv = fm.RT.statevec_names.index(h2oname)
-        h2os, areas = [], []
+        ind_sv = RT.statevec_names.index(h2oname)
+        h2os, ratios = [], []
 
         # We iterate through every possible grid point in the lookup table,
         # calculating the band ratio that we would see if this were the
@@ -105,35 +100,40 @@ def heuristic_atmosphere(
             # Get Atmospheric terms at high spectral resolution
             x_RT_2 = x_RT.copy()
             x_RT_2[ind_sv] = h2o
+            rhi = RT.get_shared_rtm_quantities(x_RT_2, geom)
+            rhoatm = instrument.sample(x_instrument, RT.wl, rhi["rhoatm"])
+            transm = instrument.sample(
+                x_instrument, RT.wl, rhi["transm_down_dir"] + rhi["transm_down_dif"]
+            )  # REVIEW: This was changed from transm as we're deprecating the key
+            sphalb = instrument.sample(x_instrument, RT.wl, rhi["sphalb"])
+            solar_irr = instrument.sample(x_instrument, RT.wl, RT.solar_irr)
 
-            # pass in all zeros, as this is ONLY used for Ls, which we will
-            # assume is not present
-            r, coeffs = invert_algebraic(
-                fm.surface,
-                fm.RT,
-                fm.instrument,
-                x_surface,
-                x_RT_2,
-                x_instrument,
-                meas,
-                geom,
-            )
-            r = fm.surface.fit_params(r, geom)[fm.idx_surf_rfl]
+            # Assume no surface emission.  "Correct" the at-sensor radiance
+            # using this presumed amount of water vapor, and measure the
+            # resulting residual (as measured from linear interpolation across
+            # the absorption feature)
+            coszen, cos_i = geom.check_coszen_and_cos_i(RT.coszen)
+            if my_RT.rt_mode == "rdn":
+                rho = meas
+            else:
+                rho = RT.rdn_to_rho(meas, coszen, solar_irr)
 
-            # Simple linear interpolation
-            vals = np.interp(wl[blo:bhi], [wl_lo, wl_hi], [r[blo], r[bhi]])
-
-            # Minimize the absolute distance between the continuum removed
-            D = np.sum(vals - r[blo:bhi])
-
-            areas.append(D)
+            r = 1.0 / (transm / (rho - rhoatm) + sphalb)
+            ratios.append((r[b945] * 2.0) / (r[b1040] + r[b865]))
             h2os.append(h2o)
 
         # Finally, interpolate to determine the actual water vapor level that
         # would optimize the continuum-relative correction
-        p = interp1d(h2os, areas)
-        bounds = (h2os[0] + 0.001, h2os[-1] - 0.001)
-        best = min1d(lambda h: abs(p(h)), bounds=bounds, method="bounded")
+        p = interp1d(h2os, ratios)
+
+        # NOTE: BW
+        # put cap on h2o based on theoretical max...
+        if geom.h2o_upper_bound > 0.0:
+            h2o_max = geom.h2o_upper_bound
+        else:
+            h2o_max = h2os[-1]
+        bounds = (h2os[0] + 0.001, h2o_max - 0.001)
+        best = min1d(lambda h: abs(1 - p(h)), bounds=bounds, method="bounded")
         x_new[ind_sv] = best.x
 
     return x_new
@@ -150,9 +150,7 @@ def invert_algebraic(
     geom: Geometry,
 ):
     """Inverts radiance algebraically using Lambertian assumptions to get a
-    reflectance.  If the appropriate transmittance terms are available,
-    surface slope will enter for the initial guess.  Otherwise, the surface
-    will be treated as if flat.
+    reflectance. 
 
     Args:
         surface: surface model
@@ -164,11 +162,26 @@ def invert_algebraic(
         meas: a one-D numpy vector of radiance in uW/nm/sr/cm2
         geom: geometry object corresponding to given measurement
 
-
     Return:
         rfl_est: estimate of the surface reflectance based on the given surface model and specified atmospheric state
-        coeffs: atmospheric parameters used for the inversion, returned for convenience
+        Ls: estimate of the emitted surface leaving radiance
+        coeffs: atmospheric parameters for the forward model
     """
+
+    # Get atmospheric optical parameters (possibly at high
+    # spectral resolution) and resample them if needed.
+    rhi = RT.get_shared_rtm_quantities(x_RT, geom)
+    wl, fwhm = instrument.calibration(x_instrument)
+    rhoatm = instrument.sample(x_instrument, RT.wl, rhi["rhoatm"])
+    transm = instrument.sample(
+        x_instrument, RT.wl, rhi["transm_down_dir"] + rhi["transm_down_dif"]
+    )  # REVIEW: Changed from transm
+    solar_irr = instrument.sample(x_instrument, RT.wl, RT.solar_irr)
+    sphalb = instrument.sample(x_instrument, RT.wl, rhi["sphalb"])
+    transup = instrument.sample(
+        x_instrument, RT.wl, rhi["transm_up_dir"]
+    )  # REVIEW: Changed from transup
+
     # Figure out which RT object we are using
     # TODO: this is currently very specific to vswir-tir 2-mode, eventually generalize
     my_RT = None
@@ -179,65 +192,31 @@ def invert_algebraic(
     if not my_RT:
         raise ValueError("No suitable RT object for initialization")
 
-    # Get all radiance terms
-    (
-        rhi,
-        L_tot,
-        L_down_dir,
-        L_down_dif,
-        L_dir_dir,
-        L_dif_dir,
-        L_dir_dif,
-        L_dif_dif,
-    ) = RT.calc_RT_quantities(x_RT, geom)
-    L_atm = RT.get_L_atm(x_RT, geom)
-    sphalb = rhi["sphalb"]
+    # Prevent NaNs
+    transm[transm == 0] = 1e-5
+
+    # Calculate the initial emission and subtract from the measurement.
+    # Surface and measured wavelengths may differ.
     Ls = surface.calc_Ls(x_surface, geom)
+    Ls_meas = interp1d(surface.wl, Ls, fill_value="extrapolate")(wl)
+    rdn_solrfl = meas - (transup * Ls_meas)
 
-    # TODO - make this a function, and use it here and in radiatve transfer
-    # transmit thermal emission through the atmosphere
-    transup = rhi["transm_up_dir"] + rhi["transm_up_dif"]
-    if np.max(transup) > 1.1:
-        raise ValueError(
-            "Transmittance up is greater than 1.0, which is not physically possible. Most likely, this is an issue with LUT input convention."
-        )
+    # Now solve for the reflectance at measured wavelengths,
+    # and back-translate to surface wavelengths
+    coszen, cos_i = geom.check_coszen_and_cos_i(RT.coszen)
+    if my_RT.rt_mode == "rdn":
+        rho = rdn_solrfl
+    else:
+        rho = RT.rdn_to_rho(rdn_solrfl, coszen, solar_irr)
 
-    # Get the wavelengths too - these may also be adjusted
-    wl, fwhm = instrument.calibration(x_instrument)
-
-    # Interpolate L_up linearly if needed.
-    Ls = interp1d(surface.wl, Ls, fill_value="extrapolate")(RT.wl)
-
-    # Now convert to what's scene at the instrument
-    L_up = Ls * transup
-
-    # Resample the components we need to use
-    L_atm = instrument.sample(x_instrument, RT.wl, L_atm)
-    L_tot = instrument.sample(x_instrument, RT.wl, L_tot)
-    sphalb = instrument.sample(x_instrument, RT.wl, sphalb)
-    L_up = instrument.sample(x_instrument, RT.wl, L_up)
-
-    # Now everything should be in hand to do the calculation
-    rdn_solrfl = meas - L_up
-    rfl = 1.0 / (L_tot / (rdn_solrfl - L_atm) + sphalb)
-
-    # explicity handle known nan cases - this doesn't handle nans
-    # that might appear from the RT directly, as we don't want to
-    # cover them up
-    rfl[rdn_solrfl - L_atm == 0] = 0.0
-    rfl[L_tot == 0] = 0.0
-
-    # While values can go above 1, they shouldn't got that high above.
-    # generally it means instability
-    rfl[rfl > 1.6] = 1.6
-
-    # interpolate the output
+    rfl = 1.0 / (transm / (rho - rhoatm) + sphalb)
+    rfl[rfl > 1.0] = 1.0
     rfl_est = interp1d(wl, rfl, fill_value="extrapolate")(surface.wl)
 
     # Some downstream code will benefit from our precalculated
     # atmospheric optical parameters
-    coeffs = L_atm, sphalb, L_tot, transup, L_up
-    return rfl_est, coeffs
+    coeffs = rhoatm, sphalb, transm, solar_irr, coszen, transup
+    return rfl_est, Ls, coeffs
 
 
 def invert_analytical(
@@ -252,7 +231,6 @@ def invert_analytical(
     hash_size: int = None,
     diag_uncert: bool = True,
     outside_ret_const: float = -0.01,
-    fill_value: float = -9999.0,
 ):
     """Perform an analytical estimate of the conditional MAP estimate for
     a fixed atmosphere.  Based on the "Inner loop" from Susiluoto, 2022.
@@ -278,11 +256,13 @@ def invert_analytical(
 
     EXIT_CODE = 0
 
+    # x = x0.copy()
+    # x_surface, x_RT, x_instrument = fm.unpack(x)
     # Note, this will fail if x_instrument is populated
     if len(fm.idx_instrument) > 0:
         raise AttributeError(
-            "Invert analytical not currently set to "
-            "handle instrument state variable indexing"
+            "Invert analytical not currently set to handle instrument state variable"
+            " indexing"
         )
 
     x = x0.copy()
@@ -293,24 +273,21 @@ def invert_analytical(
         fm.RT.calc_RT_quantities(x_RT, geom)
     )
 
-    # Path radiance and spherical albedo
+    # Pass some important variables
     L_atm = fm.RT.get_L_atm(x_RT, geom)
     s = r["sphalb"]
 
-    # Get all the surface quantities for the super pixel
+    # Get all the surface quantities
     sub_surface, sub_RT, sub_instrument = fm.unpack(sub_state)
-
-    # Surface reflectance at the wl resolution of fm.RT
-    rho_dir_dir, rho_dif_dir = fm.calc_rfl(sub_surface, geom)
-    rho_dir_dir = fm.upsample(fm.surface.wl, rho_dir_dir)
-    rho_dif_dir = fm.upsample(fm.surface.wl, rho_dif_dir)
-
-    # Background conditions equal to the superpixel reflectance
+    rho_dir_dir, rho_dif_dir, Ls = fm.upsample_surface_vectors_to_RT(
+        x_surface, geom, L_down_dir, L_down_dif
+    )
+    # background conditions
     bg = s * rho_dif_dir
 
     # Special case: 1-component model
     if type(L_tot) != np.ndarray or len(L_tot) == 1:
-        L_tot = L_down_dir + L_down_dif
+        L_tot = L_down_tot
 
     # Get the inversion indices; Include glint indices if applicable
     full_idx = np.concatenate((winidx, fm.idx_surf_nonrfl), axis=0)
@@ -318,21 +295,6 @@ def invert_analytical(
     outside_ret_windows[full_idx] = False
     outside_ret_windows = np.where(outside_ret_windows)[0]
     iv_idx = fm.surface.analytical_iv_idx
-
-    # The H matrix does not change as a function of x-vector
-    H = fm.surface.analytical_model(
-        bg,
-        L_down_dir,
-        L_down_dif,
-        L_tot,
-        geom,
-        L_dir_dir=L_dir_dir,
-        L_dir_dif=L_dir_dif,
-        L_dif_dir=L_dif_dir,
-        L_dif_dif=L_dif_dif,
-    )
-    # Sample just the wavelengths and states of interest
-    L = H[winidx, :][:, iv_idx]
 
     trajectory = np.zeros((num_iter + 1, len(x)))
     trajectory[0, :] = x
@@ -346,15 +308,12 @@ def invert_analytical(
             Sa_surface = Sa[fm.idx_surface, :][:, fm.idx_surface]
             Sa_inv = svd_inv_sqrt(Sa_surface, hash_table, hash_size)[0]
 
-        except (np.linalg.LinAlgError, ValueError) as e:
+        except ValueError:
+            # On invertible matrix error, save NaN array on step and update exit code
             C_rcond = []
-            trajectory[n + 1, :] = [fill_value] * len(x)
-            if isinstance(e, np.linalg.LinAlgError):
-                EXIT_CODE = -15
-                continue
-            elif isinstance(e, ValueError):
-                EXIT_CODE = -11
-                continue
+            trajectory[n + 1, :] = x
+            EXIT_CODE = -11
+            continue
 
         # Prior mean
         xa_full = fm.xa(x, geom)
@@ -364,6 +323,20 @@ def invert_analytical(
         prprod = Sa_inv @ xa_surface
 
         x_surface, x_RT, x_instrument = fm.unpack(x)
+
+        H = fm.surface.analytical_model(
+            bg,
+            L_down_dir,
+            L_down_dif,
+            L_tot,
+            geom,
+            L_dir_dir=L_dir_dir,
+            L_dir_dif=L_dir_dif,
+            L_dif_dir=L_dif_dir,
+            L_dif_dif=L_dif_dif,
+        )
+        # Just the wavelengths and states of interest
+        L = H[winidx, :][:, iv_idx]
 
         C = dpotrf(Seps, 1)[0]
         P = dpotri(C, 1)[0]
@@ -388,6 +361,15 @@ def invert_analytical(
 
         x[fm.idx_surface] = x_surface
         trajectory[n + 1, :] = x
+
+    # TODO
+    """
+    Not currently implemented cleanly if we want to propogate 
+    the entire glint spectrum. Need to clean up implementation.
+    """
+    # if fm.RT.glint_model and fm.surface.return_glint_spectrum:
+    #     trajectory.append(trajectory[-1][-2] * g_dir)
+    #     trajectory.append(trajectory[-1][-1] * g_dif)
 
     if diag_uncert:
         if len(C_rcond):
@@ -434,13 +416,13 @@ def invert_simple(forward: ForwardModel, meas: np.array, geom: Geometry):
 
     if vswir_present:
         x[forward.idx_RT] = heuristic_atmosphere(
-            forward, x_surface, x_RT, x_instrument, meas, geom
+            RT, instrument, x_RT, x_instrument, meas, geom
         )
-
+    
     # Now, with atmosphere fixed, we can invert the radiance algebraically
     # via Lambertian approximations to get reflectance
     x_surface, x_RT, x_instrument = forward.unpack(x)
-    rfl_est, coeffs = invert_algebraic(
+    rfl_est, Ls_est, coeffs = invert_algebraic(
         surface, RT, instrument, x_surface, x_RT, x_instrument, meas, geom
     )
 
@@ -458,8 +440,14 @@ def invert_simple(forward: ForwardModel, meas: np.array, geom: Geometry):
         else:
             rfl_est = 0.03 * np.ones(len(forward.surface.wl))
 
-    # Now we have an estimated reflectance. Fit the surface parameters.
-    x_surface[forward.idx_surface] = forward.surface.fit_params(rfl_est, geom)
+    # NOTE: BW EDITS
+    # converting "fit_params" to actually solve for radiance,
+    # so that way we can also get a better inital fit for cos-i and cos-v.. (i.e., aspect)
+    rhoatm, sphalb, transm, solar_irr, coszen, transup = coeffs 
+    L_atm = RT.get_L_atm(x_RT, geom)
+    L_down, L_dir, L_dif = RT.get_L_down_transmitted(x_RT, geom)
+
+    x_surface[forward.idx_surface] = forward.surface.fit_params(meas, L_atm, L_dir, L_dif, sphalb, geom)
 
     # Find temperature of emissive surfaces
     if tir_present:
@@ -467,7 +455,7 @@ def invert_simple(forward: ForwardModel, meas: np.array, geom: Geometry):
         # Radiate transfer calculations could take place at high spectral resolution
         # so we upsample the surface reflectance
         rfl_hi = forward.upsample(forward.surface.wl, rfl_est)
-        _, sphalb, _, transup, _ = coeffs
+        rhoatm, sphalb, transm, solar_irr, coszen, transup = coeffs
 
         L_atm = RT.get_L_atm(x_RT, geom)
         L_down_transmitted, _, _ = RT.get_L_down_transmitted(x_RT, geom)
@@ -545,7 +533,7 @@ def invert_liquid_water(
 
     Args:
         rfl_meas:            surface reflectance spectrum
-        wl:                  instrument wavelengths, must be same size as rfl_meas and in units of nm
+        wl:                  instrument wavelengths, must be same size as rfl_meas
         l_shoulder:          wavelength of left absorption feature shoulder
         r_shoulder:          wavelength of right absorption feature shoulder
         lw_init:             initial guess for liquid water path length, intercept, and slope
@@ -556,9 +544,6 @@ def invert_liquid_water(
     Returns:
         solution: estimated liquid water path length, intercept, and slope based on a given surface reflectance
     """
-    # make sure that wavelengths are provided in nm
-    if wl[0] < 100:
-        wl = units.micron_to_nm(wl)
 
     # params needed for liquid water fitting
     lw_feature_left = np.argmin(abs(l_shoulder - wl))
@@ -570,11 +555,15 @@ def invert_liquid_water(
         lw_bounds[0][1] = ewt_detection_limit
 
     # load imaginary part of liquid water refractive index and calculate wavelength dependent absorption coefficient
-    # options are: 'k_22c', 'k_minus8c', 'k_minus25c', 'k_minus7c', 'k_25c_H', 'k_20c', 'k_25c_S
-    path_k = env.path("data", "iop", "k_liquid_water_ice.csv")
-    k_wi = np.genfromtxt(path_k, delimiter=",", names=True, encoding="utf-8-sig")
-    k_wi_idx = ~np.isnan(k_wi["wl_20c"]) & ~np.isnan(k_wi["k_20c"])
-    kw = np.interp(x=wl_sel, xp=k_wi["wl_20c"][k_wi_idx], fp=k_wi["k_20c"][k_wi_idx])
+    # __file__ should live at isofit/isofit/inversion/
+    isofit_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    path_k = os.path.join(isofit_path, "data", "iop", "k_liquid_water_ice.xlsx")
+
+    k_wi = pd.read_excel(io=path_k, sheet_name="Sheet1", engine="openpyxl")
+    wl_water, k_water = get_refractive_index(
+        k_wi=k_wi, a=0, b=982, col_wvl="wvl_6", col_k="T = 20°C"
+    )
+    kw = np.interp(x=wl_sel, xp=wl_water, fp=k_water)
     abs_co_w = 4 * np.pi * kw / wl_sel
 
     rfl_meas_sel = rfl_meas[lw_feature_left : lw_feature_right + 1]

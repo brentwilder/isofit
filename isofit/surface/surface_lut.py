@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import numpy as np
+from scipy.io import loadmat
 
 from isofit.core.common import VectorInterpolator
 from isofit.surface.surface import Surface
@@ -57,6 +58,8 @@ class LUTSurface(Surface):
 
         super().__init__(full_config)
 
+        config = full_config.forward_model.surface
+
         # Models are stored as dictionaries in .mat format
         model_dict = loadmat(config.surface_file)
         self.lut_grid = [grid[0] for grid in model_dict["grids"][0]]
@@ -65,11 +68,11 @@ class LUTSurface(Surface):
         self.data = model_dict["data"]
         self.wl = model_dict["wl"][0]
         self.n_wl = len(self.wl)
-        self.bounds = self.model_dict["bounds"]
-        self.scale = self.model_dict["scale"][0]
-        self.init = self.model_dict["init"][0]
-        self.mean = self.model_dict["mean"][0]
-        self.sigma = self.model_dict["sigma"][0]
+        self.bounds = model_dict["bounds"]
+        self.scale = model_dict["scale"][0]
+        self.init = model_dict["init"][0]
+        self.mean = model_dict["mean"][0]
+        self.sigma = model_dict["sigma"][0]
         self.n_state = len(self.statevec_names)
         self.n_lut = len(self.lut_names)
         self.idx_lut = np.arange(self.n_state)
@@ -78,7 +81,9 @@ class LUTSurface(Surface):
         # build the interpolator
         self.itp = VectorInterpolator(self.lut_grid, self.data)
 
-        # Change this if you don't want to analytical solve for all the full statevector elements.
+        # To accomodate for the fact that we don't
+        # analytically solve for the diffuse glint term
+        self.analytical_interp_names = []
         self.analytical_iv_idx = np.arange(len(self.statevec_names))
 
     def xa(self, x_surface, geom):
@@ -97,10 +102,6 @@ class LUTSurface(Surface):
 
         return Cov
 
-    def Sb(self):
-        """Uncertainty due to unmodeled variables."""
-        return np.diagflat(np.power(self.bval, 2))
-
     def fit_params(self, rfl_meas, geom, *args):
         """Given a reflectance estimate, fit a state vector."""
 
@@ -108,30 +109,14 @@ class LUTSurface(Surface):
 
         return x_surface
 
-    def calc_rfl(self, x_surface, geom):
-        """Non-Lambertian reflectance.
+    def calc_rfl(self, x_surface, geom, L_down_dir=None, L_down_dif=None):
+        """Non-Lambertian reflectance."""
 
-        Inputs:
-        x_surface : np.ndarray
-            Surface portion of the statevector element
-        geom : Geometry
-            Isofit geometry object
+        # ToDo: Future use of calc_rfl() is to return a direct and diffuse surface reflectance quantity.
+        #  As long as this is not implemented, return the same reflectance vector for both.
+        rfl = self.calc_lamb(x_surface, geom)
 
-        Outputs:
-        rho_dir_dir : np.ndarray
-            Reflectance quantity for downward direct photon paths
-        rho_dif_dir : np.ndarray
-            Reflectance quantity for downward diffuse photon paths
-
-        NOTE:
-            We do not handle direct and diffuse photon path reflectance
-            quantities differently for the multicomponent surface model.
-            This is why we return the same quantity for both outputs.
-        """
-
-        rho_dir_dir = rho_dif_dir = self.calc_lamb(x_surface, geom)
-
-        return rho_dir_dir, rho_dif_dir
+        return rfl, rfl
 
     def calc_lamb(self, x_surface, geom):
         """Lambertian reflectance.  Be sure to incorporate BRDF-related
@@ -154,7 +139,7 @@ class LUTSurface(Surface):
 
         return lamb
 
-    def drfl_dsurface(self, x_surface, geom):
+    def drfl_dsurface(self, x_surface, geom, L_down_dir=None, L_down_dif=None):
         """Partial derivative of reflectance with respect to state vector,
         calculated at x_surface."""
 
@@ -219,16 +204,10 @@ class LUTSurface(Surface):
         full surface vector"""
 
         drdn_dLs = t_total_up
-
-        drdn_dsurface = np.zeros(drfl_dsurface.shape)
         drdn_drfl = self.drdn_drfl(L_tot, s_alb, rho_dif_dir)
 
-        # Construct the output matrix:
-        # Dimensions should be (len(RT.wl), len(x_surface))
-        # which is correctly handled by the instrument resampling
-        drdn_dsurface[:, : self.n_wl] = np.multiply(
-            drdn_drfl[:, np.newaxis], drfl_dsurface[:, : self.n_wl]
-        )
+        # Chain rule to get derivative w.r.t. surface complete state
+        drdn_dsurface = np.multiply(drdn_drfl, drfl_dsurface)
 
         # Get the derivative w.r.t. surface emission
         drdn_dLs = np.multiply(self.drdn_dLs(t_total_up)[:, np.newaxis], dLs_dsurface)

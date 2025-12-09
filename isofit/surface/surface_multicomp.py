@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import numpy as np
+from scipy.io import loadmat
 from scipy.linalg import block_diag, norm
 
 from isofit.core.common import svd_inv
@@ -45,13 +46,14 @@ class MultiComponentSurface(Surface):
 
         # Models are stored as dictionaries in .mat format
         # TODO: enforce surface_file existence in the case of multicomponent_surface
-        self.components = list(zip(self.model_dict["means"], self.model_dict["covs"]))
+        model_dict = loadmat(config.surface_file)
+        self.components = list(zip(model_dict["means"], model_dict["covs"]))
         self.n_comp = len(self.components)
-        self.wl = self.model_dict["wl"][0]
+        self.wl = model_dict["wl"][0]
         self.n_wl = len(self.wl)
 
         # Set up normalization method
-        self.normalize = self.model_dict["normalize"]
+        self.normalize = model_dict["normalize"]
         if self.normalize == "Euclidean":
             self.norm = lambda r: norm(r)
         elif self.normalize == "RMS":
@@ -67,7 +69,7 @@ class MultiComponentSurface(Surface):
         # Reference values are used for normalizing the reflectances.
         # in the VSWIR regime, reflectances are normalized so that the model
         # is agnostic to absolute magnitude.
-        self.refwl = np.squeeze(self.model_dict["refwl"])
+        self.refwl = np.squeeze(model_dict["refwl"])
         self.idx_ref = [np.argmin(abs(self.wl - w)) for w in np.squeeze(self.refwl)]
         self.idx_ref = np.array(self.idx_ref)
 
@@ -80,11 +82,14 @@ class MultiComponentSurface(Surface):
             self.mus.append(self.components[i][0][self.idx_ref])
 
         # Variables retrieved: each channel maps to a reflectance model parameter
-        rmin, rmax = -0.05, 2.0
+        rmin, rmax = 0, 2.0
         self.statevec_names = ["RFL_%04i" % int(w) for w in self.wl]
         self.idx_surface = np.arange(len(self.statevec_names))
 
-        # Change this if you don't want to analytical solve for all the full statevector elements.
+        # To accomodate for the fact that we don't
+        # analytically solve for the diffuse glint term
+        # Used in the analytical line
+        self.analytical_interp_names = []
         self.analytical_iv_idx = np.arange(len(self.statevec_names))
 
         self.bounds = [[rmin, rmax] for w in self.wl]
@@ -194,37 +199,21 @@ class MultiComponentSurface(Surface):
 
         return x_surface
 
-    def calc_rfl(self, x_surface, geom):
-        """Non-Lambertian reflectance.
+    def calc_rfl(self, x_surface, geom, L_down_dir=None, L_down_dif=None):
+        """Non-Lambertian reflectance."""
 
-        Inputs:
-        x_surface : np.ndarray
-            Surface portion of the statevector element
-        geom : Geometry
-            Isofit geometry object
+        # ToDo: Future use of calc_rfl() is to return a direct and diffuse surface reflectance quantity.
+        #  As long as this is not implemented, return the same reflectance vector for both.
+        rfl = self.calc_lamb(x_surface, geom)
 
-        Outputs:
-        rho_dir_dir : np.ndarray
-            Reflectance quantity for downward direct photon paths
-        rho_dif_dir : np.ndarray
-            Reflectance quantity for downward diffuse photon paths
-
-        NOTE:
-            We do not handle direct and diffuse photon path reflectance
-            quantities differently for the multicomponent surface model.
-            This is why we return the same quantity for both outputs.
-        """
-
-        rho_dir_dir = rho_dif_dir = self.calc_lamb(x_surface, geom)
-
-        return rho_dir_dir, rho_dif_dir
+        return rfl, rfl
 
     def calc_lamb(self, x_surface, geom):
         """Lambertian reflectance."""
 
         return x_surface[self.idx_lamb]
 
-    def drfl_dsurface(self, x_surface, geom):
+    def drfl_dsurface(self, x_surface, geom, L_down_dir=None, L_down_dif=None):
         """Partial derivative of reflectance with respect to state vector,
         calculated at x_surface."""
 
@@ -284,15 +273,16 @@ class MultiComponentSurface(Surface):
         """Derivative of radiance with respect to
         full surface vector"""
 
-        # Construct the output matrix:
-        # Dimensions should be (len(RT.wl), len(x_surface))
-        # which is correctly handled by the instrument resampling
-        drdn_dsurface = np.zeros(drfl_dsurface.shape)
-        drdn_drfl = self.drdn_drfl(L_tot, s_alb, rho_dif_dir)
-
-        drdn_dsurface[:, : self.n_wl] = np.multiply(
-            drdn_drfl[:, np.newaxis], drfl_dsurface[:, : self.n_wl]
+        # Element wise multiplication between
+        # drdn_drfl (vector) and eye matrix to construct
+        # drdn_drfl (diagonal)
+        drdn_drfl = np.multiply(
+            self.drdn_drfl(L_tot, s_alb, rho_dif_dir)[:, np.newaxis],
+            np.eye(len(self.wl), drfl_dsurface.shape[1]),
         )
+
+        # Chain rule to get derivative w.r.t. surface complete state
+        drdn_dsurface = np.multiply(drdn_drfl, drfl_dsurface)
 
         # Get the derivative w.r.t. surface emission
         drdn_dLs = np.multiply(self.drdn_dLs(t_total_up)[:, np.newaxis], dLs_dsurface)
@@ -318,10 +308,7 @@ class MultiComponentSurface(Surface):
         simplifies the linearization
         background = s * rho_bg
         """
-        # If you ignore multi-scattering
         theta = L_tot + (L_tot * background / (1 - background))
-        # theta = L_tot
-
         H = np.eye(self.n_wl, self.n_wl)
         H = theta[:, np.newaxis] * H
 

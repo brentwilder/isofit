@@ -24,27 +24,25 @@ import os
 from collections import OrderedDict
 from typing import List
 
+import math
 import numpy as np
 import scipy.io
 import xarray as xr
 from spectral.io import envi
+import pandas as pd
+from scipy import interpolate
+import rasterio as rio
+import pickle
 
 import isofit
-from isofit.core import units
-from isofit.core.common import (
-    envi_header,
-    eps,
-    load_spectrum,
-    load_wavelen,
-    resample_spectrum,
-)
+from isofit.core.common import envi_header, eps, load_spectrum, resample_spectrum
 from isofit.core.geometry import Geometry
-from isofit.core.multistate import match_statevector
 from isofit.data import env
 from isofit.inversion.inverse_simple import invert_algebraic
 
+import rasterio as rio
+
 ### Variables ###
-Logger = logging.getLogger(__file__)
 
 # Constants related to file I/O
 typemap = {
@@ -65,6 +63,8 @@ max_frames_size = 100
 
 
 ### Classes ###
+
+
 class SpectrumFile:
     """A buffered file object that contains configuration information about formatting, etc."""
 
@@ -85,8 +85,6 @@ class SpectrumFile:
         flag=-9999.0,
         ztitles="{Wavelength (nm), Magnitude}",
         map_info="{}",
-        engine_name=None,
-        isofit_version=None,
     ):
         """."""
 
@@ -128,7 +126,7 @@ class SpectrumFile:
                 raise IOError("MATLAB format in input block not supported")
 
         elif self.fname.endswith(".nc"):
-            logging.debug(f"Inferred NETCDF file format for {self.fname}")
+            logging.debug(f"Inferred MATLAB file format for {self.fname}")
             self.format = "NETCDF"
 
             if not self.write:
@@ -230,9 +228,6 @@ class SpectrumFile:
                 # from scratch.  Hopefully the caller has supplied the
                 # necessary metadata details.
                 meta = {
-                    "description": (
-                        f"L2A per-pixel surface retrieval (engine={engine_name}, isofit_version={isofit_version})"
-                    ),
                     "lines": n_rows,
                     "samples": n_cols,
                     "bands": n_bands,
@@ -243,14 +238,13 @@ class SpectrumFile:
                     "sensor type": "unknown",
                     "interleave": interleave,
                     "data type": typemap[dtype],
-                    "wavelength units": "Nanometers",
+                    "wavelength units": "nm",
                     "z plot range": zrange,
                     "z plot titles": ztitles,
                     "fwhm": fwhm,
                     "bbl": bad_bands,
                     "band names": band_names,
                     "wavelength": self.wl,
-                    "data ignore value": self.flag,
                 }
 
                 for k, v in meta.items():
@@ -358,12 +352,17 @@ class InputData:
 class IO:
     """..."""
 
-    def __init__(self, config: Config, forward: ForwardModel, full_statevec: list = []):
+    def __init__(self, config: Config, forward: ForwardModel):
         """Initialization specifies retrieval subwindows for calculating
         measurement cost distributions."""
 
         self.config = config
 
+        self.bbl = (
+            "{"
+            + ",".join([str(1) for n in range(len(forward.instrument.wl_init))])
+            + "}"
+        )
         self.radiance_correction = None
         self.meas_wl = forward.instrument.wl_init
         self.meas_fwhm = forward.instrument.fwhm_init
@@ -371,21 +370,8 @@ class IO:
         self.reads = 0
         self.n_rows = 1
         self.n_cols = 1
-        self.bbl = "{" + ",".join([str(1) for n in range(len(self.meas_wl))]) + "}"
-        self.engine_name = (
-            config.forward_model.radiative_transfer.radiative_transfer_engines[
-                0
-            ].engine_name
-        )
-
-        # Use the pre-defined full statevec
-        if len(full_statevec):
-            self.full_statevec = full_statevec
-        else:
-            self.full_statevec = forward.statevec
-
-        self.n_sv = len(self.full_statevec)
-        self.n_chan = len(self.meas_wl)
+        self.n_sv = len(forward.statevec)
+        self.n_chan = len(forward.instrument.wl_init)
         self.flush_rate = config.implementation.io_buffer_size
 
         self.simulation_mode = config.implementation.mode == "simulation"
@@ -396,7 +382,7 @@ class IO:
 
         # Names of either the wavelength or statevector outputs
         wl_names = [("Channel %i" % i) for i in range(self.n_chan)]
-        sv_names = self.full_statevec.copy()
+        sv_names = forward.statevec.copy()
 
         self.input_datasets, self.output_datasets, self.map_info = {}, {}, "{}"
 
@@ -433,6 +419,11 @@ class IO:
                 band_names = "{}"
 
             n_bands = len(band_names)
+
+            if element_name == "posterior_uncertainty_file":
+                n_bands += 1 # BW NOTE, adding one for mean abs percent error
+                band_names.append('MAPE')
+            
             self.output_datasets[element_name] = SpectrumFile(
                 element,
                 write=True,
@@ -448,8 +439,6 @@ class IO:
                 map_info=self.map_info,
                 zrange=zrange,
                 ztitles=ztitle,
-                engine_name=self.engine_name,
-                isofit_version=config.implementation.isofit_version,
             )
 
         # Do we apply a radiance correction?
@@ -460,7 +449,132 @@ class IO:
         # Load the earth sun distance data
         self.esd = self.load_esd()
 
-    def get_components_at_index(self, row: int, col: int) -> InputData:
+        # Load the Slope data
+        loc_path = str(self.config.input.loc_file)
+        slope_path = str(os.path.join(os.path.dirname(loc_path), "slope.tif"))
+        self.slope = rio.open(slope_path).read(1).astype(float) 
+
+        # Capping polynomial to not allow negative, or increasing trend, at very high ground altitudes (>6km).
+        min_value = 0.25
+
+        h2o_poly = {
+            "ATM_TROPICAL": lambda x: np.maximum(
+                6.74256 + (-2.37052 * x) + (0.313829 * x**2) + (-0.0159003 * x**3),
+                min_value,
+            ),
+            "ATM_MIDLAT_SUMMER": lambda x: np.maximum(
+                5.350046
+                + (-1.839548 * x)
+                + (2.296582e-01 * x**2)
+                + (-1.020594e-02 * x**3),
+                min_value,
+            ),
+            "ATM_MIDLAT_WINTER": lambda x: np.maximum(
+                1.371226
+                + (-0.442087 * x)
+                + (4.485325e-02 * x**2)
+                + (-1.130163e-03 * x**3),
+                min_value,
+            ),
+            "ATM_SUBARC_SUMMER": lambda x: np.maximum(
+                3.121272
+                + (-1.171145 * x)
+                + (1.704094e-01 * x**2)
+                + (-9.701062e-03 * x**3),
+                min_value,
+            ),
+            "ATM_SUBARC_WINTER": lambda x: np.maximum(
+                0.630406
+                + (-0.176336 * x)
+                + (8.286409e-03 * x**2)
+                + (8.138824e-04 * x**3),
+                min_value,
+            ),
+            "ATM_US_STANDARD_1976": lambda x: np.maximum(
+                2.869655
+                + (-1.227473 * x)
+                + (2.039059e-01 * x**2)
+                + (-1.274801e-02 * x**3),
+                min_value,
+            ),
+        }
+
+        aot_poly = {
+            "ATM_TROPICAL": lambda x: 0.042090
+            + (-0.003120 * x)
+            + (4.462979e-18 * x**2)
+            + (-4.260469e-19 * x**3),
+            "ATM_MIDLAT_SUMMER": lambda x: 0.042090
+            + (-0.003120 * x)
+            + (4.462979e-18 * x**2)
+            + (-4.260469e-19 * x**3),
+            "ATM_MIDLAT_WINTER": lambda x: 0.024748
+            + (-0.001654 * x)
+            + (-5.083805e-07 * x**2)
+            + (7.252007e-08 * x**3),
+            "ATM_SUBARC_SUMMER": lambda x: 0.042090
+            + (-0.003120 * x)
+            + (4.462979e-18 * x**2)
+            + (-4.260469e-19 * x**3),
+            "ATM_SUBARC_WINTER": lambda x: 0.024748
+            + (-0.001654 * x)
+            + (-5.083805e-07 * x**2)
+            + (7.252007e-08 * x**3),
+            "ATM_US_STANDARD_1976": lambda x: 0.042090
+            + (-0.003120 * x)
+            + (4.462979e-18 * x**2)
+            + (-4.260469e-19 * x**3),
+        }
+
+        # NOTE: max h2o is based on atm mid lat winter, which would encompass low h2o levels of arctic.
+        # a LUT with summer maybe could pose issues here, but high altitude snow is the application here.
+        self.adjust_aot_lower_bound = aot_poly["ATM_MIDLAT_WINTER"]
+        self.adjust_h2o_upper_bound = h2o_poly["ATM_MIDLAT_WINTER"]
+
+        # load the svf data
+        self.svf = rio.open(str(os.path.join(os.path.dirname(loc_path), "svf.tif"))).read(1).astype(float)
+
+        # NOTE: in my implementation of shadow here, its ray tracing and 1 is sun and 0 is shadow.
+        # flipped so i can just easily multiply by mu_s every time.
+        try:
+            self.shadow = np.load(str(os.path.join(os.path.dirname(loc_path), "shadow.npy")), mmap_mode='r')
+        except:
+            self.shadow = np.ones_like(self.svf)
+
+        try:
+            self.rho_e = np.load(str(os.path.join(os.path.dirname(loc_path), "rho_e.npy")), mmap_mode='r')
+            self.rho_terrain = np.load(str(os.path.join(os.path.dirname(loc_path), "rho_terrain.npy")), mmap_mode='r')
+            self.no_bkg = 0
+        except:
+            self.no_bkg = 1
+
+        # NOTE: sensors defined by number of channels.
+        if self.n_chan == 425:
+            data_sensor = "ANG"
+        if self.n_chan == 230:
+            data_sensor = "PRISMA"
+        if self.n_chan == 285:
+            data_sensor = "EMIT"
+        if self.n_chan == 299:
+            data_sensor = "APEX"
+
+        # load endmember data
+        # saved as tuple (mu, V)
+        npv_file = env.path("data", f"npv_{data_sensor}.pkl")
+        with open(npv_file, 'rb') as f:
+            self.npv = pickle.load(f)
+
+        pv_file = env.path("data", f"pv_{data_sensor}.pkl")
+        with open(pv_file, 'rb') as f:
+            self.pv = pickle.load(f)
+
+        soil_file = env.path("data", f"soil_{data_sensor}.pkl")         
+        with open(soil_file, 'rb') as f:
+            self.soil = pickle.load(f)
+        
+
+
+    def get_components_at_index(self, row: int, col: int, bkg_solve=False) -> InputData:
         """
         Load data from input files at the specified (row, col) index.
 
@@ -471,7 +585,7 @@ class IO:
         Returns:
             InputData: object containing all current data reads
         """
-
+        #print(row,col)
         # Prepare out input data object by blanking it out
         self.current_input_data.clear()
 
@@ -512,19 +626,31 @@ class IO:
             if np.allclose(data[source], self.input_datasets[source].flag):
                 return None
 
-        # Check if Sky view is used, else it is equal to 1.0.
-        if "skyview_factor_file" not in data or data["skyview_factor_file"] is None:
-            data["skyview_factor_file"] = 1.0
-
         # We build the geometry object for this spectrum.  For files not
         # specified in the input configuration block, the associated entries
         # will be 'None'. The Geometry object will use reasonable defaults.
+        slope = self.slope[row, col]
+        svf = self.svf[row,col]
+        shadow = self.shadow[row,col]
+
+        if self.no_bkg == 1 or bkg_solve == True:
+            bkg_terms = (None, None)
+        else:
+            # recast to float 32
+            bkg_terms = (self.rho_e[row,col,:].astype(np.float32), self.rho_terrain[row,col,:].astype(np.float32))
+            #bkg_terms = (self.rho_e, self.rho_terrain)
+
+
         geom = Geometry(
             obs=data["obs_file"],
             loc=data["loc_file"],
             esd=self.esd,
-            bg_rfl=data["background_reflectance_file"],
-            svf=data["skyview_factor_file"],
+            svf=svf,
+            shadow=shadow,
+            slope=slope,
+            modtran_adjustments=(self.adjust_h2o_upper_bound, self.adjust_aot_lower_bound),
+            endmember_data = (self.pv, self.npv, self.soil, self.meas_wl),
+            bkg_terms=bkg_terms,
         )
 
         self.current_input_data.geom = geom
@@ -575,12 +701,7 @@ class IO:
             self.flush_buffers()
 
     def build_output(
-        self,
-        states: List,
-        input_data: InputData,
-        fm: ForwardModel,
-        iv: Inversion,
-        fill_value=-9999.0,
+        self, states: List, input_data: InputData, fm: ForwardModel, iv: Inversion
     ):
         """
         Build the output to be written to disk as a dictionary
@@ -596,9 +717,10 @@ class IO:
 
         if len(states) == 0:
             # Write a bad data flag
-            atm_bad = np.zeros(len(fm.instrument.n_chan) * 5) + fill_value
-            state_bad = np.zeros(len(fm.statevec)) + fill_value
-            data_bad = np.zeros(fm.instrument.n_chan) + fill_value
+            atm_bad = np.zeros(len(fm.instrument.n_chan) * 5) * -9999.0
+            state_bad = np.zeros(len(fm.statevec)) * -9999.0
+            state_bad_unc = np.zeros(len(fm.statevec)+1) * -9999.0
+            data_bad = np.zeros(fm.instrument.n_chan) * -9999.0
             to_write = {
                 "estimated_state_file": state_bad,
                 "estimated_reflectance_file": data_bad,
@@ -611,7 +733,7 @@ class IO:
                 "atmospheric_coefficients_file": atm_bad,
                 "radiometry_correction_file": data_bad,
                 "spectral_calibration_file": data_bad,
-                "posterior_uncertainty_file": state_bad,
+                "posterior_uncertainty_file": state_bad_unc,
             }
 
         else:
@@ -626,21 +748,9 @@ class IO:
             else:
                 state_est = states[-1, :]
 
-            # Make important check that fm.statevec !> full_statevec.
-            if len(fm.statevec) > len(self.full_statevec):
-                logging.error(
-                    "Length of the output statevector is shorter than the "
-                    "forward model currently being written. Potential issue "
-                    "with initialization of IO class."
-                )
-                raise IOError("len(fm.statevec) > len(self.full_statevec)")
-
             ############ Start with all of the 'independent' calculations
             if "estimated_state_file" in self.output_datasets:
-                # state_est transformed to reflect io.full_statevec
-                to_write["estimated_state_file"] = match_statevector(
-                    state_est, self.full_statevec, fm.statevec
-                )
+                to_write["estimated_state_file"] = state_est
 
             if "path_radiance_file" in self.output_datasets:
                 # Note: for glint models, this will return atm + glint
@@ -655,19 +765,20 @@ class IO:
                 # Spectral calibration
                 wl, fwhm = fm.calibration(state_est)
                 cal = np.column_stack(
-                    [
-                        np.arange(0, len(wl)),
-                        units.nm_to_micron(wl),
-                        units.nm_to_micron(fwhm),
-                    ]
+                    [np.arange(0, len(wl)), wl / 1000.0, fwhm / 1000.0]
                 )
                 to_write["spectral_calibration_file"] = cal
 
             if "posterior_uncertainty_file" in self.output_datasets:
                 S_hat, K, G = iv.calc_posterior(state_est, geom, meas)
-                to_write["posterior_uncertainty_file"] = match_statevector(
-                    np.sqrt(np.diag(S_hat)), self.full_statevec, fm.statevec
-                )
+                U = np.sqrt(np.diag(S_hat))
+                asp_rad = math.atan2(U[0], U[1])
+                asp_deg = np.degrees(asp_rad)
+                U[0] = asp_rad # NOTE first one is aspect radians
+                U[1] = asp_deg # second is aspect degrees
+                uncert_out = np.append(U, geom.MAPE)    
+                to_write["posterior_uncertainty_file"] = uncert_out
+                # NOTE BW: aspect is scaled by atan2
 
             ############ Now proceed to the calcs where they may be some overlap
 
@@ -727,7 +838,7 @@ class IO:
                 item in ["algebraic_inverse_file", "atmospheric_coefficients_file"]
                 for item in self.output_datasets
             ):
-                rfl_alg_opt, coeffs = invert_algebraic(
+                rfl_alg_opt, Ls, coeffs = invert_algebraic(
                     fm.surface,
                     fm.RT,
                     fm.instrument,
@@ -744,17 +855,10 @@ class IO:
                 )
 
             if "atmospheric_coefficients_file" in self.output_datasets:
-                rhoatm, sphalb, L_tot, transup, L_Up = coeffs
-                verified_geom = geom.verify(fm.RT.coszen)
-                coszen, cos_i = verified_geom["coszen"], verified_geom["cos_i"]
-                solar_irr = fm.RT.rt_engines[0].solar_irr
-
-                atm_vars = [rhoatm, sphalb, L_tot, solar_irr]
-
+                rhoatm, sphalb, transm, solar_irr, coszen, transup = coeffs
                 atm = np.column_stack(
-                    atm_vars + [np.ones((len(self.meas_wl), 1)) * coszen]
+                    list(coeffs[:4]) + [np.ones((len(self.meas_wl), 1)) * coszen]
                 )
-
                 atm = atm.T.reshape((len(self.meas_wl) * 5,))
                 to_write["atmospheric_coefficients_file"] = atm
 
@@ -803,53 +907,6 @@ class IO:
         self.write_datasets(
             row, col, to_write, states, flush_immediately=flush_immediately
         )
-
-    @staticmethod
-    def initialize_output_files(config, n_rows, n_cols, full_statevector):
-        wl_init, fwhm_init = load_wavelen(
-            config.forward_model.instrument.wavelength_file
-        )
-        wl_names = [("Channel %i" % i) for i in range(len(wl_init))]
-        bbl = "{" + ",".join([str(1) for n in range(len(wl_init))]) + "}"
-        engine_name = (
-            config.forward_model.radiative_transfer.radiative_transfer_engines[
-                0
-            ].engine_name
-        )
-
-        for element, element_header, element_name in zip(
-            *config.output.get_output_files()
-        ):
-            band_names, ztitle, zrange = element_header
-
-            if band_names == "statevector":
-                band_names = full_statevector
-            elif band_names == "wavelength":
-                band_names = wl_names
-            elif band_names == "atm_coeffs":
-                band_names = wl_names * 5
-            else:
-                band_names = "{}"
-
-            n_bands = len(band_names)
-            _ = SpectrumFile(
-                element,
-                write=True,
-                n_rows=n_rows,
-                n_cols=n_cols,
-                n_bands=n_bands,
-                interleave="bip",
-                dtype=np.float32,
-                wavelengths=wl_init,
-                fwhm=fwhm_init,
-                band_names=band_names,
-                bad_bands=bbl,
-                map_info="{}",
-                zrange=zrange,
-                ztitles=ztitle,
-                engine_name=engine_name,
-                isofit_version=config.implementation.isofit_version,
-            )
 
     @staticmethod
     def load_esd(file=None):
@@ -903,27 +960,3 @@ def write_bil_chunk(
     outfile.seek(line * shape[1] * shape[2] * np.dtype(dtype).itemsize)
     outfile.write(dat.astype(dtype).tobytes())
     outfile.close()
-
-
-def initialize_output(output_metadata, outpath, out_shape, **kwargs):
-    """
-    Initialize output file by updating metadata and creating object.
-
-    Args:
-        output_metadata: dict - Dictionary with envi header information
-        outpath: str - path to output file
-        out_shape: tuple - dimensions of initialized file
-        keys_to_del: list - keys to remove from output_metadata
-        kwargs - key-argument pairs to add to output_metadata
-    """
-    for key, value in kwargs.items():
-        output_metadata[key] = value
-
-    out_file = envi.create_image(
-        envi_header(outpath), ext="", metadata=output_metadata, force=True
-    )
-    out_mm = out_file.open_memmap(interleave="source", writable=True)
-    out_mm[:, :] = np.zeros(out_shape, dtype=np.float32)
-    del out_file
-
-    return outpath

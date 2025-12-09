@@ -15,7 +15,7 @@
 #  limitations under the License.
 #
 # ISOFIT: Imaging Spectrometer Optimal FITting
-# Author: David R Thompson, david.r.thompson@jpl.nasa.gov
+# Author: David R Thompson, david.r.thompson@jpl.nasa.gov 
 #
 from __future__ import annotations
 
@@ -23,7 +23,6 @@ import logging
 
 import numpy as np
 from scipy.interpolate import interp1d
-from scipy.io import loadmat
 
 from isofit.core.common import load_spectrum, load_wavelen
 
@@ -36,7 +35,6 @@ class Surface:
 
     def __init__(self, full_config: Config):
         config = full_config.forward_model.surface
-        self.model_dict = loadmat(config.surface_file)
 
         self.statevec_names = []
         self.idx_surface = np.arange(len(self.statevec_names))
@@ -51,20 +49,14 @@ class Surface:
         self.wl = None
         self.fwhm = None
 
-        # 1st Priority: use the wavelength file
         if config.wavelength_file is not None:
             self.wl, self.fwhm = load_wavelen(config.wavelength_file)
-        # 2nd Priority: use the wl from the surface model file
-        elif "wl" in self.model_dict:
-            self.wl = self.model_dict["wl"][0]
-        # Special case for simulation mode
         elif full_config.implementation.mode == "simulation":
             logging.info(
                 "No surface wavelength_file provided, getting wavelengths from"
                 " input.reflectance_file"
             )
             _, self.wl = load_spectrum(full_config.input.reflectance_file)
-        # Else: wl = None
 
         if self.wl is not None:
             self.n_wl = len(self.wl)
@@ -86,10 +78,6 @@ class Surface:
 
         return np.zeros((0, 0), dtype=float)
 
-    def Sb(self):
-        """Uncertainty due to unmodeled variables."""
-        return np.diagflat(np.power(self.bval, 2))
-
     def fit_params(self, rfl_meas, geom, *args):
         """Given a directional reflectance estimate and one or more emissive
         parameters, fit a state vector."""
@@ -101,7 +89,7 @@ class Surface:
 
         return self.rfl
 
-    def calc_rfl(self, x_surface, geom):
+    def calc_rfl(self, x_surface, geom, L_down_dir=None, L_down_dif=None):
         """Calculate the directed reflectance (specifically the HRDF) for this
         state vector."""
 
@@ -109,7 +97,7 @@ class Surface:
         #  As long as this is not implemented, return the same reflectance vector for both.
         return self.rfl, self.rfl
 
-    def drfl_dsurface(self, x_surface, geom):
+    def drfl_dsurface(self, x_surface, geom, L_down_dir=None, L_down_dif=None):
         """Partial derivative of reflectance with respect to state vector,
         calculated at x_surface. In the case that there are no free
         paramters our convention is to return the vector of zeros."""

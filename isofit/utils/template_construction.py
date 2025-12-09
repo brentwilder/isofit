@@ -2,14 +2,13 @@
 #
 # Authors: Philip G. Brodrick and Niklas Bohn
 #
-from __future__ import annotations
 
 import json
 import logging
 import os
 import subprocess
 from datetime import datetime
-from os.path import abspath, dirname, exists, join, split
+from os.path import abspath, exists, join, split
 from shutil import copyfile
 from sys import platform
 from typing import List
@@ -19,18 +18,15 @@ import numpy as np
 from scipy.io import loadmat
 from spectral.io import envi
 
-from isofit import __version__
-from isofit.core import isofit, units
+from isofit.core import isofit
 from isofit.core.common import (
     envi_header,
     expand_path,
     json_load_ascii,
     resample_spectrum,
 )
-from isofit.core.multistate import SurfaceMapping
 from isofit.data import env
-from isofit.radiative_transfer.engines.modtran import ModtranRT
-from isofit.utils.surface_model import surface_model
+from isofit.utils import surface_model
 
 
 class Pathnames:
@@ -43,28 +39,22 @@ class Pathnames:
         input_radiance,
         input_loc,
         input_obs,
-        surface_class_file,
+        sensor,
         surface_path,
         working_directory,
+        copy_input_files,
+        modtran_path,
+        rdn_factors_path,
+        model_discrepancy_path,
+        aerosol_climatology_path,
+        channelized_uncertainty_path,
         ray_temp_dir,
-        sensor="NA-*",
-        copy_input_files=False,
-        modtran_path=None,
-        rdn_factors_path=None,
-        model_discrepancy_path=None,
-        aerosol_climatology_path=None,
-        channelized_uncertainty_path=None,
-        interpolate_inplace=False,
-        skyview_factor=None,
-        subs: bool = False,
-        classify_multisurface: bool = False,
+        interpolate_inplace,
     ):
         # Determine FID based on sensor name
         if sensor == "ang":
             self.fid = split(input_radiance)[-1][:18]
         elif sensor == "av3":
-            self.fid = split(input_radiance)[-1][:18]
-        elif sensor == "av5":
             self.fid = split(input_radiance)[-1][:18]
         elif sensor == "avcl":
             self.fid = split(input_radiance)[-1][:16]
@@ -96,6 +86,7 @@ class Pathnames:
         self.input_radiance_file = input_radiance
         self.input_loc_file = input_loc
         self.input_obs_file = input_obs
+        #self.input_svf_file = join(os.path.dirname(input_obs), "svf")
         self.working_directory = abspath(working_directory)
 
         self.full_lut_directory = abspath(join(self.working_directory, "lut_full/"))
@@ -108,6 +99,8 @@ class Pathnames:
         self.data_directory = abspath(join(self.working_directory, "data/"))
         self.input_data_directory = abspath(join(self.working_directory, "input/"))
         self.output_directory = abspath(join(self.working_directory, "output/"))
+
+        
 
         # define all output names
         rdn_fname = self.fid + "_rdn"
@@ -123,8 +116,7 @@ class Pathnames:
         self.state_working_path = abspath(
             join(self.output_directory, rdn_fname.replace("_rdn", "_state"))
         )
-        self.surface_template_path = abspath(join(self.data_directory, "surface.mat"))
-        self.surface_working_paths = {}
+        self.surface_working_path = abspath(join(self.data_directory, "surface.mat"))
 
         if copy_input_files is True:
             self.radiance_working_path = abspath(
@@ -136,37 +128,11 @@ class Pathnames:
             self.loc_working_path = abspath(
                 join(self.input_data_directory, self.fid + "_loc")
             )
-
-            if classify_multisurface and not surface_class_file:
-                self.surface_class_working_path = abspath(
-                    join(self.input_data_directory, self.fid + "_surface_class")
-                )
-            else:
-                self.surface_class_working_path = (
-                    abspath(surface_class_file) if surface_class_file else None
-                )
-
-            self.surface_class_subs_path = abspath(
-                join(self.input_data_directory, self.fid + "_subs_surface_class")
-            )
-
         else:
             self.radiance_working_path = abspath(self.input_radiance_file)
             self.obs_working_path = abspath(self.input_obs_file)
             self.loc_working_path = abspath(self.input_loc_file)
-
-            if classify_multisurface and not surface_class_file:
-                self.surface_class_working_path = abspath(
-                    join(self.input_data_directory, self.fid + "_surface_class")
-                )
-            else:
-                self.surface_class_working_path = (
-                    abspath(surface_class_file) if surface_class_file else None
-                )
-
-            self.surface_class_subs_path = abspath(
-                join(self.input_data_directory, self.fid + "_subs_surface_class")
-            )
+            #self.svf_working_path = abspath(self.input_svf_file)
 
         if interpolate_inplace:
             self.radiance_interp_path = self.radiance_working_path
@@ -195,15 +161,6 @@ class Pathnames:
             join(self.data_directory, "model_discrepancy.mat")
         )
 
-        if skyview_factor:
-            self.svf_working_path = abspath(skyview_factor)
-        else:
-            self.svf_working_path = None
-
-        self.svf_subs_path = abspath(
-            join(self.input_data_directory, self.fid + "_subs_svf")
-        )
-
         self.rdn_subs_path = abspath(
             join(self.input_data_directory, self.fid + "_subs_rdn")
         )
@@ -213,9 +170,7 @@ class Pathnames:
         self.loc_subs_path = abspath(
             join(self.input_data_directory, self.fid + "_subs_loc")
         )
-
         self.rfl_subs_path = abspath(
-            # join(self.output_directory, self.fid + f"{subs_str}" + "_rfl")
             join(self.output_directory, self.fid + "_subs_rfl")
         )
         self.atm_coeff_path = abspath(
@@ -256,6 +211,8 @@ class Pathnames:
 
         if sensor == "avcl":
             self.noise_path = str(env.path("data", "avirisc_noise.txt"))
+        #if sensor == "ang":
+        #    self.noise_path = str(env.path("data", "avirisng_noise.txt"))
         elif sensor == "oci":
             self.noise_path = str(env.path("data", "oci", "oci_noise.txt"))
         elif sensor == "emit":
@@ -315,6 +272,7 @@ class Pathnames:
             (self.input_radiance_file, self.radiance_working_path, True),
             (self.input_obs_file, self.obs_working_path, True),
             (self.input_loc_file, self.loc_working_path, True),
+            (self.surface_path, self.surface_working_path, False),
             (
                 self.input_channelized_uncertainty_path,
                 self.channelized_uncertainty_working_path,
@@ -364,7 +322,6 @@ class LUTConfig:
         lut_config_file: str = None,
         emulator: str = None,
         no_min_lut_spacing: bool = False,
-        atmosphere_type="ATM_MIDLAT_SUMMER",
     ):
         if lut_config_file is not None:
             with open(lut_config_file, "r") as f:
@@ -385,11 +342,11 @@ class LUTConfig:
         self.h2o_spacing_min = 0.03
 
         # Special parameter to specify the minimum allowable water vapor value in g / m2
-        self.h2o_min = 0.2
+        self.h2o_min = 0.05
 
         # Set defaults, will override based on settings
         # Units of g / m2
-        self.h2o_range = [0.2, 5]
+        self.h2o_range = [0.05, 5]
 
         # Units of degrees
         self.to_sensor_zenith_spacing = 10
@@ -416,27 +373,20 @@ class LUTConfig:
         self.aerosol_2_spacing_min = 0
 
         # Units of AOD
-        self.aerosol_0_range = [
-            ModtranRT.modtran_aot_lowerbound_polynomials()[atmosphere_type](0),
-            1,
-        ]
-        self.aerosol_1_range = [
-            ModtranRT.modtran_aot_lowerbound_polynomials()[atmosphere_type](0),
-            1,
-        ]
-        self.aerosol_2_range = [
-            ModtranRT.modtran_aot_lowerbound_polynomials()[atmosphere_type](0),
-            1,
-        ]
-        self.aot_550_range = [
-            ModtranRT.modtran_aot_lowerbound_polynomials()[atmosphere_type](0),
-            1,
-        ]
+        self.aerosol_0_range = [0.001, 1]
+        self.aerosol_1_range = [0.001, 1]
+        self.aerosol_2_range = [0.001, 1]
+        self.aot_550_range = [0.001, 1]
 
         self.aot_550_spacing = 0
         self.aot_550_spacing_min = 0
 
         self.no_min_lut_spacing = no_min_lut_spacing
+
+        # NOTE: BW updates using custom grids. Set defaults here
+        #self.custom_spacing = False
+        #self.h2o_actual = [0.001, 1]
+        #self.aot_550_actual = [0.001, 1]
 
         # overwrite anything that comes in from the config file
         if lut_config_file is not None:
@@ -510,39 +460,21 @@ class SerialEncoder(json.JSONEncoder):
             return super(SerialEncoder, self).default(obj)
 
 
-def check_surface_model(
-    surface_path: str,
-    output_model_path: str = None,
-    wl: np.array = [],
-    surface_wavelength_path: str = "",
-    surface_category: str = "multicomponent_surface",
-    multisurface: bool = False,
-) -> str:
+def check_surface_model(surface_path: str, wl: np.array, paths: Pathnames) -> str:
     """
     Checks and rebuilds surface model if needed.
-
-    TODO - Could be extended to allow for both dir and file surface_path
-           inputs. The dir inputs could accomdate complex surfaces where
-           different surface priors might be useful. This extension
-           would be relatively easy. Wrap this in a check for surface_path
-           vs. surface_path_dir. Each file in the dir can undergo the
-           same check coded here.
 
     Args:
         surface_path: path to surface model or config dict
         wl: instrument center wavelengths
-        surface_wavelength_path: path to wavelength file
+        paths: object containing references to all relevant file locations
     """
     if os.path.isfile(surface_path):
         if surface_path.endswith(".mat"):
             # check wavelength grid of surface model if provided
             model_dict = loadmat(surface_path)
             wl_surface = model_dict["wl"][0]
-
-            if not len(wl):
-                logging.info("No wl array given. Not checking channel number matchup")
-
-            elif len(wl_surface) != len(wl):
+            if len(wl_surface) != len(wl):
                 raise ValueError(
                     "Number of channels provided in surface model file does not match"
                     " wavelengths in radiance cube. Please rebuild your surface model."
@@ -553,76 +485,15 @@ def check_surface_model(
                     " wavelengths in radiance cube. Please consider rebuilding your"
                     " surface model for optimal performance."
                 )
-
-            if multisurface:
-                # TODO Change the surface model structure for multisurface runs
-                # Instead of passing multiple surface.mat files throughout.
-                # Carry the surface type keys and dynamically select the matching type within surface.component
-                raise ValueError(
-                    "Apply OE in multistate-mode can currently only be run from a .json surface file. Please use the path to the .json file as the surface_ath. Must include the 'surface_type' keys."
-                )
-
-            return {surface_category: surface_path}
-
+            return surface_path
         elif surface_path.endswith(".json"):
             logging.info(
                 "No surface model provided. Build new one using given config file."
             )
-
-            if not surface_wavelength_path:
-                raise ValueError(
-                    "Building surface model requires input surface wavelength path"
-                )
-
-            if not output_model_path:
-                logging.info(
-                    "No output path provided via check_surface, "
-                    "using output file within surface config."
-                )
-                configdir, _ = os.path.split(os.path.abspath(surface_path))
-                config = json_load_ascii(surface_path, shell_replace=True)
-                output_model_path = expand_path(configdir, config["output_model_file"])
-
-            surface_model(
-                config_path=surface_path,
-                wavelength_path=surface_wavelength_path,
-                output_path=output_model_path,
-                multisurface=multisurface,
-            )
-
-            # Handle a multisurface run with split
-            if multisurface:
-                config = json_load_ascii(surface_path, shell_replace=True)
-                surface_categories = []
-                for source in config["sources"]:
-                    surface_category = source.get("surface_category")
-                    if not surface_category:
-                        raise ValueError(
-                            "Multisurface ISOFIT surface configs require "
-                            "surface category to be specific in config. "
-                            "No 'surface_category' key found. Check config"
-                        )
-                    surface_categories.append(surface_category)
-
-                surface_paths = {}
-                for surface_category in np.unique(surface_categories):
-                    name, ext = os.path.splitext(output_model_path)
-                    surface_paths[str(surface_category)] = (
-                        f"{name}_{str(surface_category)}{ext}"
-                    )
-
-            else:
-                surface_paths = {surface_category: output_model_path}
-
-            for path in surface_paths.values():
-                try:
-                    model_dict = loadmat(path)
-                except ValueError:
-                    raise ValueError(
-                        "Surface.mat file failed to load. " "Check configuration."
-                    )
-            return surface_paths
-
+            surface_model(config_path=surface_path)
+            configdir, _ = os.path.split(os.path.abspath(surface_path))
+            config = json_load_ascii(surface_path, shell_replace=True)
+            return expand_path(configdir, config["output_model_file"])
         else:
             raise FileNotFoundError(
                 "Unrecognized format of surface file. Please provide either a .mat model or a .json config dict."
@@ -637,11 +508,10 @@ def build_presolve_config(
     paths: Pathnames,
     h2o_lut_grid: np.array,
     n_cores: int = -1,
-    use_superpixels: bool = False,
+    use_emp_line: bool = False,
     surface_category="multicomponent_surface",
     emulator_base: str = None,
     uncorrelated_radiometric_uncertainty: float = 0.0,
-    dn_uncertainty_file: str = None,
     segmentation_size: int = 400,
     debug: bool = False,
     inversion_windows=[[350.0, 1360.0], [1410, 1800.0], [1970.0, 2500.0]],
@@ -654,11 +524,10 @@ def build_presolve_config(
         paths: object containing references to all relevant file locations
         h2o_lut_grid: the water vapor look up table grid isofit should use for this solve
         n_cores: number of cores to use in processing
-        use_superpixels: flag whether or not to use superpixels for the solution
+        use_emp_line: flag whether or not to set up for the empirical line estimation
         surface_category: type of surface to use
         emulator_base: the basename of the emulator, if used
         uncorrelated_radiometric_uncertainty: uncorrelated radiometric uncertainty parameter for isofit
-        dn_uncertainty_file: Path to a linearity .mat file to augment S matrix with linearity uncertainty
         segmentation_size: image segmentation size if empirical line is used
         debug: flag to enable debug_mode in the config.implementation
         prebuilt_lut_path: lut path to use; if none, presolve config will create a new file
@@ -667,7 +536,7 @@ def build_presolve_config(
 
     # Determine number of spectra included in each retrieval.  If we are
     # operating on segments, this will average down instrument noise
-    if use_superpixels:
+    if use_emp_line:
         spectra_per_inversion = segmentation_size
     else:
         spectra_per_inversion = 1
@@ -678,6 +547,11 @@ def build_presolve_config(
         engine_name = "KernelFlowsGP"
     else:
         engine_name = "sRTMnet"
+
+    if surface_category == "glint_model_surface":
+        glint_model = True
+    else:
+        glint_model = False
 
     if prebuilt_lut_path is None:
         lut_path = join(paths.lut_h2o_directory, "lut.nc")
@@ -696,6 +570,7 @@ def build_presolve_config(
             "vswir": {
                 "engine_name": engine_name,
                 "multipart_transmittance": multipart_transmittance,
+                "glint_model": glint_model,
                 "lut_path": lut_path,
                 "sim_path": paths.lut_h2o_directory,
                 "template_file": paths.h2o_template_path,
@@ -709,10 +584,10 @@ def build_presolve_config(
                     float(np.min(lut_grid["H2OSTR"])),
                     float(np.max(lut_grid["H2OSTR"])),
                 ],
-                "scale": 0.01,
-                "init": np.percentile(lut_grid["H2OSTR"], 25),
+                "scale": 1.0,
+                "init": 0.05,
                 "prior_sigma": 100.0,
-                "prior_mean": 1.5,
+                "prior_mean": 0.05,
             }
         },
         "lut_grid": lut_grid,
@@ -723,16 +598,16 @@ def build_presolve_config(
         radiative_transfer_config["radiative_transfer_engines"]["vswir"][
             "emulator_file"
         ] = abspath(emulator_base)
-
-        if multipart_transmittance:
-            radiative_transfer_config["radiative_transfer_engines"]["vswir"][
-                "emulator_aux_file"
-            ] = emulator_base
-        else:
-            radiative_transfer_config["radiative_transfer_engines"]["vswir"][
-                "emulator_aux_file"
-            ] = abspath(os.path.splitext(emulator_base)[0] + "_aux.npz")
-
+        radiative_transfer_config["radiative_transfer_engines"]["vswir"][
+            "emulator_aux_file"
+        ] = abspath(os.path.splitext(emulator_base)[0] + "_aux.npz")
+        radiative_transfer_config["radiative_transfer_engines"]["vswir"][
+            "interpolator_base_path"
+        ] = abspath(
+            os.path.join(
+                paths.lut_h2o_directory, os.path.basename(emulator_base) + "_vi"
+            )
+        )
         radiative_transfer_config["radiative_transfer_engines"]["vswir"][
             "earth_sun_distance_file"
         ] = paths.earth_sun_distance_path
@@ -757,13 +632,14 @@ def build_presolve_config(
                 "wavelength_file": paths.wavelength_path,
                 "integrations": spectra_per_inversion,
                 "unknowns": {
-                    "uncorrelated_radiometric_uncertainty": uncorrelated_radiometric_uncertainty,
-                    "dn_uncertainty_file": dn_uncertainty_file,
+                    "uncorrelated_radiometric_uncertainty": uncorrelated_radiometric_uncertainty
                 },
             },
-            "surface": make_surface_config(
-                paths, surface_category, use_superpixels=use_superpixels
-            ),
+            "surface": {
+                "surface_category": surface_category,
+                "surface_file": paths.surface_working_path,
+                "select_on_init": True,
+            },
             "radiative_transfer": radiative_transfer_config,
         },
         "implementation": {
@@ -771,7 +647,6 @@ def build_presolve_config(
             "inversion": {"windows": inversion_windows},
             "n_cores": n_cores,
             "debug_mode": debug,
-            "isofit_version": __version__,
         },
     }
 
@@ -797,7 +672,7 @@ def build_presolve_config(
             "radiometry_correction_file"
         ] = paths.rdn_factors_path
 
-    if use_superpixels:
+    if use_emp_line:
         isofit_config_h2o["input"]["measured_radiance_file"] = paths.rdn_subs_path
         isofit_config_h2o["input"]["loc_file"] = paths.loc_subs_path
         isofit_config_h2o["input"]["obs_file"] = paths.obs_subs_path
@@ -808,14 +683,11 @@ def build_presolve_config(
         isofit_config_h2o["input"]["loc_file"] = paths.loc_working_path
         isofit_config_h2o["input"]["obs_file"] = paths.obs_working_path
 
-    # write presolve config
+    # write modtran_template
     with open(paths.h2o_config_path, "w") as fout:
         fout.write(
             json.dumps(isofit_config_h2o, cls=SerialEncoder, indent=4, sort_keys=True)
         )
-
-    # Create a template version of the config
-    env.toTemplate(paths.h2o_config_path, working_directory=paths.working_directory)
 
 
 def build_main_config(
@@ -829,12 +701,11 @@ def build_main_config(
     mean_latitude: float = None,
     mean_longitude: float = None,
     dt: datetime = None,
-    use_superpixels: bool = True,
+    use_emp_line: bool = True,
     n_cores: int = -1,
     surface_category="multicomponent_surface",
     emulator_base: str = None,
     uncorrelated_radiometric_uncertainty: float = 0.0,
-    dn_uncertainty_file: str = None,
     multiple_restarts: bool = False,
     segmentation_size=400,
     pressure_elevation: bool = False,
@@ -842,7 +713,7 @@ def build_main_config(
     inversion_windows=[[350.0, 1360.0], [1410, 1800.0], [1970.0, 2500.0]],
     prebuilt_lut_path: str = None,
     multipart_transmittance: bool = False,
-    surface_mapping: dict = None,
+    pixel_size: int = 30,
 ) -> None:
     """Write an isofit config file for the main solve, using the specified pathnames and all given info
 
@@ -860,23 +731,21 @@ def build_main_config(
         mean_latitude:                        the latitude isofit should use for this solve
         mean_longitude:                       the longitude isofit should use for this solve
         dt:                                   the datetime object corresponding to this flightline to use for this solve
-        use_superpixels:                      flag whether or not to use superpixels for the solution
+        use_emp_line:                         flag whether or not to set up for the empirical line estimation
         n_cores:                              the number of cores to use during processing
         surface_category:                     type of surface to use
         emulator_base:                        the basename of the emulator, if used
         uncorrelated_radiometric_uncertainty: uncorrelated radiometric uncertainty parameter for isofit
-        dn_uncertainty_file:                       Path to a linearity .mat file to augment S matrix with linearity uncertainty
         multiple_restarts:                    if true, use multiple restarts
         segmentation_size:                    image segmentation size if empirical line is used
         pressure_elevation:                   if true, retrieve pressure elevation
         debug:                                if true, run ISOFIT in debug mode
         multipart_transmittance:              flag to indicate whether a 4-component transmittance model is to be used
-        surface_mapping:                      optional object to pass mapping between surface class and surface model
     """
 
     # Determine number of spectra included in each retrieval.  If we are
     # operating on segments, this will average down instrument noise
-    if use_superpixels:
+    if use_emp_line:
         spectra_per_inversion = segmentation_size
     else:
         spectra_per_inversion = 1
@@ -893,15 +762,23 @@ def build_main_config(
     else:
         engine_name = "sRTMnet"
 
+    if surface_category == "glint_model_surface":
+        glint_model = True
+    else:
+        glint_model = False
+
     radiative_transfer_config = {
         "radiative_transfer_engines": {
             "vswir": {
                 "engine_name": engine_name,
                 "multipart_transmittance": multipart_transmittance,
+                "glint_model": glint_model,
                 "sim_path": paths.full_lut_directory,
                 "lut_path": lut_path,
                 "aerosol_template_file": paths.aerosol_tpl_path,
                 "template_file": paths.modtran_template_path,
+                # lut_names - populated below
+                # statevector_names - populated below
             }
         },
         "statevector": {},
@@ -913,16 +790,17 @@ def build_main_config(
         radiative_transfer_config["radiative_transfer_engines"]["vswir"][
             "emulator_file"
         ] = abspath(emulator_base)
-
-        if multipart_transmittance:
-            radiative_transfer_config["radiative_transfer_engines"]["vswir"][
-                "emulator_aux_file"
-            ] = emulator_base
-        else:
-            radiative_transfer_config["radiative_transfer_engines"]["vswir"][
-                "emulator_aux_file"
-            ] = abspath(os.path.splitext(emulator_base)[0] + "_aux.npz")
-
+        radiative_transfer_config["radiative_transfer_engines"]["vswir"][
+            "emulator_aux_file"
+        ] = abspath(os.path.splitext(emulator_base)[0] + "_aux.npz")
+        radiative_transfer_config["radiative_transfer_engines"]["vswir"][
+            "interpolator_base_path"
+        ] = abspath(
+            os.path.join(
+                paths.full_lut_directory,
+                os.path.basename(os.path.splitext(emulator_base)[0]) + "_vi",
+            )
+        )
         radiative_transfer_config["radiative_transfer_engines"]["vswir"][
             "earth_sun_distance_file"
         ] = paths.earth_sun_distance_path
@@ -953,27 +831,22 @@ def build_main_config(
     if prebuilt_lut_path is None:
         if h2o_lut_grid is not None and len(h2o_lut_grid) > 1:
             radiative_transfer_config["lut_grid"]["H2OSTR"] = h2o_lut_grid.tolist()
-
         if elevation_lut_grid is not None and len(elevation_lut_grid) > 1:
             radiative_transfer_config["lut_grid"][
                 "surface_elevation_km"
             ] = elevation_lut_grid.tolist()
-
         if to_sensor_zenith_lut_grid is not None and len(to_sensor_zenith_lut_grid) > 1:
             radiative_transfer_config["lut_grid"][
                 "observer_zenith"
             ] = to_sensor_zenith_lut_grid.tolist()
-
         if to_sun_zenith_lut_grid is not None and len(to_sun_zenith_lut_grid) > 1:
             radiative_transfer_config["lut_grid"][
                 "solar_zenith"
             ] = to_sun_zenith_lut_grid.tolist()
-
         if relative_azimuth_lut_grid is not None and len(relative_azimuth_lut_grid) > 1:
             radiative_transfer_config["lut_grid"][
                 "relative_azimuth"
             ] = relative_azimuth_lut_grid.tolist()
-
         radiative_transfer_config["lut_grid"].update(aerosol_lut_grid)
 
     rtc_ln = {}
@@ -1000,14 +873,9 @@ def build_main_config(
 
         # first, check if observer zenith angle in prebuilt LUT comes in MODTRAN convention
         # and convert lut grid as needed
-        try:
-            if any(np.array(ncds["observer_zenith"]) > 90.0):
-                to_sensor_zenith_lut_grid = np.sort(
-                    [180 - x for x in to_sensor_zenith_lut_grid]
-                )
-        except IndexError:
-            logging.warning(
-                "Key observer_zenith not found in prebuilt LUT. Conversion to MODTRAN convention not necessary."
+        if any(np.array(ncds["observer_zenith"]) > 90.0):
+            to_sensor_zenith_lut_grid = np.sort(
+                [180 - x for x in to_sensor_zenith_lut_grid]
             )
 
         radiative_transfer_config["radiative_transfer_engines"]["vswir"]["lut_names"][
@@ -1025,7 +893,6 @@ def build_main_config(
         radiative_transfer_config["radiative_transfer_engines"]["vswir"]["lut_names"][
             "relative_azimuth"
         ] = get_lut_subset(relative_azimuth_lut_grid)
-
         for key in aerosol_lut_grid.keys():
             radiative_transfer_config["radiative_transfer_engines"]["vswir"][
                 "lut_names"
@@ -1049,10 +916,11 @@ def build_main_config(
     if h2o_lut_grid is not None:
         radiative_transfer_config["statevector"]["H2OSTR"] = {
             "bounds": [h2o_lut_grid[0], h2o_lut_grid[-1]],
+            #"bounds": [0.05, 0.25],
             "scale": 1,
-            "init": (h2o_lut_grid[1] + h2o_lut_grid[-1]) / 2.0,
+            "init": 0.05,
             "prior_sigma": 100.0,
-            "prior_mean": (h2o_lut_grid[1] + h2o_lut_grid[-1]) / 2.0,
+            "prior_mean": 0.05,
         }
 
     if pressure_elevation:
@@ -1077,20 +945,17 @@ def build_main_config(
         "forward_model": {
             "instrument": {
                 "wavelength_file": paths.wavelength_path,
+                "pixel_size": pixel_size,
                 "integrations": spectra_per_inversion,
                 "unknowns": {
-                    "uncorrelated_radiometric_uncertainty": uncorrelated_radiometric_uncertainty,
-                    "dn_uncertainty_file": dn_uncertainty_file,
+                    "uncorrelated_radiometric_uncertainty": uncorrelated_radiometric_uncertainty
                 },
             },
-            "surface": make_surface_config(
-                paths,
-                surface_category,
-                pressure_elevation,
-                elevation_lut_grid,
-                surface_mapping=surface_mapping,
-                use_superpixels=use_superpixels,
-            ),
+            "surface": {
+                "surface_file": paths.surface_working_path,
+                "surface_category": surface_category,
+                "select_on_init": True,
+            },
             "radiative_transfer": radiative_transfer_config,
         },
         "implementation": {
@@ -1098,16 +963,13 @@ def build_main_config(
             "inversion": {"windows": inversion_windows},
             "n_cores": n_cores,
             "debug_mode": debug,
-            "isofit_version": __version__,
         },
     }
 
-    if use_superpixels:
+    if use_emp_line:
         isofit_config_modtran["input"]["measured_radiance_file"] = paths.rdn_subs_path
         isofit_config_modtran["input"]["loc_file"] = paths.loc_subs_path
         isofit_config_modtran["input"]["obs_file"] = paths.obs_subs_path
-        if paths.svf_working_path:
-            isofit_config_modtran["input"]["skyview_factor_file"] = paths.svf_subs_path
         isofit_config_modtran["output"]["estimated_state_file"] = paths.state_subs_path
         isofit_config_modtran["output"][
             "posterior_uncertainty_file"
@@ -1115,19 +977,19 @@ def build_main_config(
         isofit_config_modtran["output"][
             "estimated_reflectance_file"
         ] = paths.rfl_subs_path
+        isofit_config_modtran["output"][
+            "atmospheric_coefficients_file"
+        ] = paths.atm_coeff_path
     else:
         isofit_config_modtran["input"][
             "measured_radiance_file"
         ] = paths.radiance_working_path
         isofit_config_modtran["input"]["loc_file"] = paths.loc_working_path
         isofit_config_modtran["input"]["obs_file"] = paths.obs_working_path
-        if paths.svf_working_path:
-            isofit_config_modtran["input"][
-                "skyview_factor_file"
-            ] = paths.svf_working_path
-        isofit_config_modtran["output"][
-            "posterior_uncertainty_file"
-        ] = paths.uncert_working_path
+        #isofit_config_modtran["input"]["svf_file"] = paths.svf_working_path
+
+        isofit_config_modtran["output"]["posterior_uncertainty_file"] = paths.uncert_working_path
+
         isofit_config_modtran["output"][
             "estimated_reflectance_file"
         ] = paths.rfl_working_path
@@ -1171,7 +1033,6 @@ def build_main_config(
         isofit_config_modtran["forward_model"]["instrument"][
             "parametric_noise_file"
         ] = paths.noise_path
-
     else:
         isofit_config_modtran["forward_model"]["instrument"]["SNR"] = 500
 
@@ -1187,11 +1048,6 @@ def build_main_config(
                 isofit_config_modtran, cls=SerialEncoder, indent=4, sort_keys=True
             )
         )
-
-    # Create a template version of the config
-    env.toTemplate(
-        paths.isofit_full_config_path, working_directory=paths.working_directory
-    )
 
 
 def get_lut_subset(vals):
@@ -1359,11 +1215,11 @@ def load_climatology(
         aerosol_lut = lut_params.get_grid(
             alr[0], alr[1], aerosol_lut_spacing[_a], aerosol_lut_spacing_mins[_a]
         )
-
+        aerosol_lut = None
         if aerosol_lut is not None:
             aerosol_state_vector["AERFRAC_{}".format(_a)] = {
                 "bounds": [float(alr[0]), float(alr[1])],
-                "scale": 1,
+                "scale": 0.01,
                 "init": float((alr[1] - alr[0]) / 10.0 + alr[0]),
                 "prior_sigma": 10.0,
                 "prior_mean": float((alr[1] - alr[0]) / 10.0 + alr[0]),
@@ -1371,6 +1227,8 @@ def load_climatology(
 
             aerosol_lut_grid["AERFRAC_{}".format(_a)] = aerosol_lut.tolist()
 
+    # NOTE: BW edit here
+    # instead of using "get_grid", if custom is true it just overwrites with what I have in the config..
     aot_550_lut = lut_params.get_grid(
         lut_params.aot_550_range[0],
         lut_params.aot_550_range[1],
@@ -1378,15 +1236,22 @@ def load_climatology(
         lut_params.aot_550_spacing_min,
     )
 
+    #if lut_params.custom_spacing is True:
+    #    aot_550_lut = lut_params.aot_550_actual
+
+
+
     if aot_550_lut is not None:
+        #aerosol_lut_grid["AOT550"] = aot_550_lut
         aerosol_lut_grid["AOT550"] = aot_550_lut.tolist()
         alr = [aerosol_lut_grid["AOT550"][0], aerosol_lut_grid["AOT550"][-1]]
         aerosol_state_vector["AOT550"] = {
             "bounds": [float(alr[0]), float(alr[1])],
-            "scale": 1,
-            "init": float((alr[1] - alr[0]) / 10.0 + alr[0]),
-            "prior_sigma": 10.0,
-            "prior_mean": float((alr[1] - alr[0]) / 10.0 + alr[0]),
+            #"bounds": [0.03, 0.6],
+            "scale": 1.,
+            "init": 0.1001,
+            "prior_sigma": 100.,
+            "prior_mean": float(0.1),
         }
 
     logging.info("Loading Climatology")
@@ -1500,8 +1365,8 @@ def define_surface_types(
     fwhm: np.array,
 ):
     if np.all(wl < 10):
-        wl = units.micron_to_nm(wl)
-        fwhm = unts.micron_to_nm(fwhm)
+        wl = wl * 1000
+        fwhm = fwhm * 1000
 
     irr_file = os.path.join(
         os.path.dirname(isofit.__file__), "..", "..", "data", "kurucz_0.1nm.dat"
@@ -1646,7 +1511,7 @@ def get_metadata_from_obs(
     obs = obs_dataset.open_memmap(interleave="bip", writable=False)
     valid = np.logical_not(np.any(np.isclose(obs, nodata_value), axis=2))
 
-    path_km = units.m_to_km(obs[:, :, 0])
+    path_km = obs[:, :, 0] / 1000.0
     to_sensor_azimuth = obs[:, :, 1]
     to_sensor_zenith = obs[:, :, 2]
     to_sun_azimuth = obs[:, :, 3]
@@ -1786,11 +1651,11 @@ def get_metadata_from_loc(
     # Grab zensor position and orientation information
     mean_latitude = np.mean(loc_data[1, valid].flatten())
     mean_longitude = np.mean(-1 * loc_data[0, valid].flatten())
-    mean_elevation_km = units.m_to_km(np.mean(loc_data[2, valid]))
+    mean_elevation_km = np.mean(loc_data[2, valid]) / 1000.0
 
     # make elevation grid
-    min_elev = units.m_to_km(np.min(loc_data[2, valid]))
-    max_elev = units.m_to_km(np.max(loc_data[2, valid]))
+    min_elev = np.min(loc_data[2, valid]) / 1000.0
+    max_elev = np.max(loc_data[2, valid]) / 1000.0
     if pressure_elevation:
         min_elev = max(min_elev - 2, 0)
         max_elev += 2
@@ -1856,197 +1721,3 @@ def reassemble_cube(matching_indices: np.array, paths: Pathnames):
             output_mm[matching_indices == _st, ...] = input_ds.open_memmap(
                 interleave="bip"
             )[:, :, : int(header["bands"])].copy()[:, 0, :]
-
-
-def sensor_name_to_dt(sensor: str, fid: str):
-    inversion_window_update = None
-    if sensor == "ang":
-        # parse flightline ID (AVIRIS-NG assumptions)
-        dt = datetime.strptime(fid[3:], "%Y%m%dt%H%M%S")
-    elif sensor == "av3":
-        # parse flightline ID (AVIRIS-3 assumptions)
-        dt = datetime.strptime(fid[3:], "%Y%m%dt%H%M%S")
-        inversion_window_update = [[380.0, 1350.0], [1435, 1800.0], [1970.0, 2500.0]]
-    elif sensor == "av5":
-        # parse flightline ID (AVIRIS-5 assumptions)
-        dt = datetime.strptime(fid[3:], "%Y%m%dt%H%M%S")
-    elif sensor == "avcl":
-        # parse flightline ID (AVIRIS-Classic assumptions)
-        dt = datetime.strptime("20{}t000000".format(fid[1:7]), "%Y%m%dt%H%M%S")
-    elif sensor == "emit":
-        # parse flightline ID (EMIT assumptions)
-        dt = datetime.strptime(fid[:19], "emit%Y%m%dt%H%M%S")
-        INVERSION_WINDOWS = [[380.0, 1325.0], [1435, 1770.0], [1965.0, 2500.0]]
-    elif sensor == "enmap":
-        # parse flightline ID (EnMAP assumptions)
-        dt = datetime.strptime(fid[:15], "%Y%m%dt%H%M%S")
-    elif sensor == "hyp":
-        # parse flightline ID (Hyperion assumptions)
-        dt = datetime.strptime(fid[10:17], "%Y%j")
-    elif sensor == "neon":
-        # parse flightline ID (NEON assumptions)
-        dt = datetime.strptime(fid, "NIS01_%Y%m%d_%H%M%S")
-    elif sensor == "prism":
-        # parse flightline ID (PRISM assumptions)
-        dt = datetime.strptime(fid[3:], "%Y%m%dt%H%M%S")
-    elif sensor == "prisma":
-        # parse flightline ID (PRISMA assumptions)
-        dt = datetime.strptime(fid, "%Y%m%d%H%M%S")
-    elif sensor == "gao":
-        # parse flightline ID (GAO/CAO assumptions)
-        dt = datetime.strptime(fid[3:-5], "%Y%m%dt%H%M%S")
-    elif sensor == "oci":
-        # parse flightline ID (PACE OCI assumptions)
-        dt = datetime.strptime(fid[9:24], "%Y%m%dT%H%M%S")
-    elif sensor == "tanager":
-        # parse flightline ID (Tanager assumptions)
-        dt = datetime.strptime(fid[:15], "%Y%m%d_%H%M%S")
-    elif sensor[:3] == "NA-":
-        dt = datetime.strptime(sensor[3:], "%Y%m%d")
-    else:
-        raise ValueError(
-            "Datetime object could not be obtained. Please check file name of input"
-            " data."
-        )
-    return dt, inversion_window_update
-
-
-def get_wavelengths(
-    envi_file: str, wavelength_path: str = None
-) -> (np.array, np.array):
-    """Get wavelengths and FWHM from the header of an ENVI file
-
-    Args:
-        envi_file: path to the ENVI file to read wavelengths from
-        wavelength_path: optional path to a file containing wavelengths and FWHM
-
-    Returns:
-        tuple containing:
-            wl - array of wavelengths in nm
-            fwhm - array of full width at half maximum in nm
-    """
-
-    # get radiance file, wavelengths, fwhm
-    radiance_dataset = envi.open(envi_header(envi_file))
-    wl_ds = np.array([float(w) for w in radiance_dataset.metadata["wavelength"]])
-    if wavelength_path:
-        if os.path.isfile(wavelength_path):
-            chn, wl, fwhm = np.loadtxt(wavelength_path).T
-            if len(chn) != len(wl_ds):
-                raise ValueError(
-                    "Number of channels in wavelength file do not match"
-                    " wavelengths in radiance cube. Please adjust your wavelength file."
-                )
-        else:
-            pass
-    else:
-        logging.info(
-            "No wavelength file provided. Obtaining wavelength grid from ENVI header of radiance cube."
-        )
-        wl = wl_ds
-        if "fwhm" in radiance_dataset.metadata:
-            fwhm = np.array([float(f) for f in radiance_dataset.metadata["fwhm"]])
-        elif "FWHM" in radiance_dataset.metadata:
-            fwhm = np.array([float(f) for f in radiance_dataset.metadata["FWHM"]])
-        else:
-            fwhm = np.ones(wl.shape) * (wl[1] - wl[0])
-
-    # Close out radiance dataset to avoid potential confusion
-    del radiance_dataset
-
-    # Convert to microns if needed
-    if wl[0] > 100:
-        logging.info("Wavelength units of nm inferred...converting to microns")
-        wl = units.nm_to_micron(wl)
-        fwhm = units.nm_to_micron(fwhm)
-
-    return wl, fwhm
-
-
-def write_wavelength_file(filename, wl, fwhm):
-    """Write a wavelength file in isofit-expected format
-    Units can be either nm or microns, but should be the same
-
-    Args:
-        filename: path to the file to write
-        wl: array of wavelengths
-        fwhm: array of full width at half maximum
-
-    Returns:
-        None
-    """
-    # write wavelength file
-    wl_data = np.concatenate(
-        [np.arange(len(wl))[:, np.newaxis], wl[:, np.newaxis], fwhm[:, np.newaxis]],
-        axis=1,
-    )
-    np.savetxt(filename, wl_data, delimiter=" ")
-
-
-def make_surface_config(
-    paths: Pathnames,
-    surface_category="multicomponent_surface",
-    pressure_elevation=None,
-    elevation_lut_grid=[],
-    surface_mapping: dict = None,
-    use_superpixels=False,
-):
-    """
-    Constructs the surface component of the config
-    Args:
-        paths: Pathnames object with all key values passed from apply_oe
-        surface_category: Base surface category
-    Returns:
-        surface_config_dict: Dictionary with all surface parameters and file
-                             locations.
-    """
-
-    # Initialize config dict
-    surface_config_dict = {
-        "multi_surface_flag": False,
-    }
-
-    # Check to see if a classification file is being propogated
-    # If so, use multisurface
-    if paths.surface_class_working_path:
-        surface_config_dict["Surfaces"] = {}
-
-        if use_superpixels:
-            surface_config_dict["surface_class_file"] = paths.surface_class_subs_path
-        else:
-            surface_config_dict["surface_class_file"] = paths.surface_class_working_path
-
-        surface_config_dict["base_surface_class_file"] = (
-            paths.surface_class_working_path
-        )
-
-        surface_config_dict["multi_surface_flag"] = True
-
-        # Get the surface categories present.
-        surface_classes_present = np.unique(
-            envi.open(envi_header(paths.surface_class_working_path)).open_memmap(
-                inteleave="bip"
-            )
-        )
-
-        # Iterate through all classes present in class image
-        for i in surface_classes_present:
-            surface_category = SurfaceMapping[int(i)]
-            # If surface_path given, use for all surfaces
-            surface_path = paths.surface_working_paths[surface_category]
-
-            # Set up "Surfaces" component of surface config
-            surface_config_dict["Surfaces"][surface_category] = {
-                "surface_int": int(i),
-                "surface_file": surface_path,
-                "surface_category": surface_category,
-            }
-
-    # Single surface run
-    else:
-        surface_config_dict["surface_file"] = paths.surface_working_paths[
-            surface_category
-        ]
-        surface_config_dict["surface_category"] = surface_category
-
-    return surface_config_dict

@@ -18,7 +18,7 @@
 # Author: David R Thompson, david.r.thompson@jpl.nasa.gov
 #         Philip G Brodrick, philip.brodrick@jpl.nasa.gov
 #
-__version__ = "3.6.1"
+__version__ = "10.1.1"
 
 
 import logging
@@ -37,22 +37,18 @@ def checkNumThreads():
     """
     threads = "unknown"
     error = False
-    try:
-        if info := threadpool_info():
-            threads = info[0]["num_threads"]
-            if threads > 1:
-                error = "greater than 1"
-        else:
-            error = "not set to 1"
-    except:
-        Logger.exception("Failed to retrieve threadpool_info")
-        error = "undetected"
+    if info := threadpool_info():
+        threads = info[0]["num_threads"]
+        if threads > 1:
+            error = "greater than"
+    else:
+        error = "not set to"
 
     if error:
         Logger.warning(
             f"""
 ******************************************************************************************
-! Number of threads is {error} (currently: {threads}), this may greatly impact performance
+! Number of threads is {error} 1 (currently: {threads}), this may greatly impact performance
 ! Please set this the environment variables 'MKL_NUM_THREADS' and 'OMP_NUM_THREADS' to '1'
 ******************************************************************************************\
 """

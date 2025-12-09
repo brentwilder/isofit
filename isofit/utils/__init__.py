@@ -4,8 +4,10 @@ from .extractions import extractions
 from .generate_noise import generate_noise
 from .instrument_model import instrument_model
 from .interpolate_spectra import interpolate_spectra
-from .multicomponent_classification import multicomponent_classification
 from .reconstruct import reconstruct_subs
 from .remap import remap
 from .segment import segment
 from .surface_model import surface_model
+from .snow_model_outputs import *
+from .shadow import *
+from .bkg_contributions import *

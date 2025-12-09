@@ -105,26 +105,21 @@ def validate(path=None, checkForUpdate=True, debug=print, error=print, **_):
         error("[x] Examples path does not exist")
         return False
 
-    expected = set(
-        [
-            "20151026_SantaMonica",
-            "20171108_Pasadena",
-            "20190806_ThermalIR",
-            "LICENSE",
-            "README.md",
-            "image_cube",
-            "profiling_cube",
-        ]
-    )
-    names = set([file.name for file in path.glob("*")])
-    if missing := (expected - names):
+    expected = [
+        "20151026_SantaMonica",
+        "20171108_Pasadena",
+        "20190806_ThermalIR",
+        "LICENSE",
+        "README.md",
+        "image_cube",
+        "profiling_cube",
+        "py-hypertrace",
+    ]
+    if not list(path.glob("*")) != expected:
         error("[x] ISOFIT examples do not appear to be installed correctly")
-        debug(f"Expected: {expected}")
-        debug(f"Got: {names}")
-        debug(f"Missing: {missing}")
         return False
 
-    debug("[OK] Path is valid")
+    debug("[✓] Path is valid")
 
     if checkForUpdate:
         return isUpToDate(path, debug=debug, error=error)
@@ -179,7 +174,7 @@ def isUpToDate(path=None, tag="latest", debug=print, error=print, **_):
         error(f"[x] Latest is {latest}, currently installed is {current}")
         return False
 
-    debug(f"[OK] Path is up to date, current version is: {current}")
+    debug(f"[✓] Path is up to date, current version is: {current}")
 
     return True
 

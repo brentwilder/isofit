@@ -26,11 +26,17 @@ from collections import OrderedDict
 import numpy as np
 import scipy.linalg
 from scipy.optimize import least_squares
+from scipy.optimize import minimize
 
 from isofit.core.common import combos, conditional_gaussian, eps, svd_inv, svd_inv_sqrt
 from isofit.inversion.inverse_simple import invert_simple
 
+### Variables ###
+
 error_code = -1
+
+
+### Classes ###
 
 
 class Inversion:
@@ -106,7 +112,7 @@ class Inversion:
         # Set least squares params that come from the forward model
         self.least_squares_params = {
             "method": "trf",
-            "max_nfev": 20,
+            "max_nfev": 50,
             "bounds": (
                 self.fm.bounds[0][self.inds_free],
                 self.fm.bounds[1][self.inds_free],
@@ -174,33 +180,27 @@ class Inversion:
 
         xa = self.fm.xa(x, geom)
         Sa = self.fm.Sa(x, geom)
-        Sa_inv = svd_inv(
-            Sa, hashtable=self.hashtable, max_hash_size=self.max_table_size
-        )
-        K = self.fm.K(x, geom)
+
+        # NOTE: this is also zero'd out for Sa inv
+        #Sa_inv = svd_inv(Sa, hashtable=self.hashtable, max_hash_size=self.max_table_size)
+        Sa_inv = 0
+
         Seps = self.fm.Seps(x, meas, geom)
+        Seps = Seps[np.ix_(self.winidx, self.winidx)]
         Seps_inv = svd_inv(
             Seps, hashtable=self.hashtable, max_hash_size=self.max_table_size
         )
 
-        # Gain matrix G reflects current state, so we use the state-dependent
-        # Jacobian matrix K
-        S_hat = svd_inv(
-            K.T.dot(Seps_inv).dot(K) + Sa_inv,
-            hashtable=self.hashtable,
-            max_hash_size=self.max_table_size,
-        )
+        K = geom.total_jac
+
+        #import pdb
+        #pdb.set_trace()
+        S_hat = np.linalg.pinv(K.T @ K) # TODO: testing with just 2pooint jac of fwd model
+        #S_hat = np.linalg.pinv(K.T.dot(Seps_inv).dot(K) + Sa_inv)   
+
         G = S_hat.dot(K.T).dot(Seps_inv)
 
-        # N. Cressie [ASA 2018] suggests an alternate definition of S_hat for
-        # more statistically-consistent posterior confidence estimation
-        if self.state_indep_S_hat:
-            Ka = self.fm.K(xa, geom)
-            S_hat = svd_inv(
-                Ka.T.dot(Seps_inv).dot(Ka) + Sa_inv,
-                hashtable=self.hashtable,
-                max_hash_size=self.max_table_size,
-            )
+
         return S_hat, K, G
 
     def calc_Seps(self, x, meas, geom):
@@ -288,18 +288,34 @@ class Inversion:
         est_meas = self.fm.calc_meas(x, geom)
         est_meas_window = est_meas[self.winidx]
         meas_window = meas[self.winidx]
+
+
         meas_resid = (est_meas_window - meas_window).dot(Seps_inv_sqrt)
 
+        # NOTE: this is short cut for now since we don't have priors, to be revisited.
+        
         # Prior cost term
-        xa_free, Sa_free, Sa_free_inv, Sa_free_inv_sqrt = self.calc_conditional_prior(
-            x_free, geom
-        )
-        prior_resid = (x_free - xa_free).dot(Sa_free_inv_sqrt)
-
+        #xa_free, Sa_free, Sa_free_inv, Sa_free_inv_sqrt = self.calc_conditional_prior(
+        #    x_free, geom
+        #)
+        #prior_resid = (x_free - xa_free).dot(Sa_free_inv_sqrt)
+        
         # Total cost
-        total_resid = np.concatenate((meas_resid, prior_resid))
+        #total_resid = np.concatenate((meas_resid, prior_resid))
 
-        return np.real(total_resid), x
+
+
+        #import matplotlib.pyplot as plt
+        #plt.plot(meas, color='k')
+        #plt.plot(est_meas, color='red')
+        #print(x)
+        #plt.show()
+
+        return np.real(meas_resid), x
+
+
+
+
 
     def invert(self, meas, geom):
         """Inverts a meaurement and returns a state vector.
@@ -312,6 +328,31 @@ class Inversion:
         """
         self.counts = 0
         costs, solutions = [], []
+
+        # NOTE: 
+        # BW EDIT HERE
+        # This seems to be the best spot to introduce the geom object
+        # which was defined in input io to correct h2o and aot range
+        # for this specific pixel, that is a function of Altitude 
+
+        # if not a fill value do it, but otherwise, keep existing...
+        if geom.h2o_upper_bound > 0:
+            self.fm.bounds[1][-1] = float(geom.h2o_upper_bound) - 1e-8
+        
+        if geom.aot_lower_bound > 0:
+            self.fm.bounds[0][-2] = float(geom.aot_lower_bound) + 1e-8
+            
+        # Overwrite for dynamic assignment of bounds.
+        self.least_squares_params = {
+            "method": "trf",
+            "max_nfev": 125,
+            "bounds": (
+                self.fm.bounds[0][self.inds_free],
+                self.fm.bounds[1][self.inds_free],
+            ),
+            "ftol":1e-8,
+            "x_scale": self.fm.scale[self.inds_free],
+        }
 
         # Simulations are easy - return the initial state vector
         if self.mode == "simulation":
@@ -331,12 +372,13 @@ class Inversion:
             # Calculate the initial solution, if needed.
             x0 = invert_simple(self.fm, meas, geom)
 
+            # BW NOTE: removed this line
             # Update regions outside retrieval windows to match priors
-            if self.config.priors_in_initial_guess:
-                prior_subset_idx = np.arange(len(x0))[self.fm.idx_surf_rfl][
-                    self.outside_ret_windows
-                ]
-                x0[prior_subset_idx] = self.fm.surface.xa(x0, geom)[prior_subset_idx]
+            #if self.config.priors_in_initial_guess:
+            #    prior_subset_idx = np.arange(len(x0))[self.fm.idx_surf_rfl][
+            #        self.outside_ret_windows
+            #    ]
+            #    x0[prior_subset_idx] = self.fm.surface.xa(x0, geom)[prior_subset_idx]
 
             trajectory.append(x0)
 
@@ -372,6 +414,7 @@ class Inversion:
             # unknown variables. For speed, we will calculate it just once based
             # on the initial solution (a potential minor source of inaccuracy).
             Seps_inv, Seps_inv_sqrt = self.calc_Seps(x, meas, geom)
+            #Seps_inv, Seps_inv_sqrt = None, None
 
             def jac(x_free):
                 """Short wrapper function for use with scipy opt"""
@@ -387,12 +430,92 @@ class Inversion:
                 rs = float(np.sum(np.power(residual, 2)))
                 sm = self.fm.summarize(x, geom)
                 logging.debug("Iteration: %02i  Residual: %12.2f %s" % (it, rs, sm))
+                #print("Iteration: %02i  Residual: %12.2f %s" % (it, rs, sm))
 
                 return np.real(residual)
 
             # Initialize and invert
+            # NOTE: had to add this here because some optimizations fail
+            geom.total_jac = np.zeros((len(self.winidx), len(x0)))
             try:
-                xopt = least_squares(err, x0, jac=jac, **self.least_squares_params)
+                #import time
+                #start = time.time()
+                #xopt = least_squares(err, x0, jac=jac, **self.least_squares_params)
+                xopt = least_squares(err, x0, jac="2-point", **self.least_squares_params)
+                #end = time.time()
+                #print('time:', end - start)
+
+                # produce Mean Absolute Percent Error purely based on the data.
+                est_meas = self.fm.calc_meas(xopt.x, geom)
+                est_meas_window = est_meas[self.winidx]
+                meas_window = meas[self.winidx]
+                idx_gt_0 = np.argwhere((meas_window>1) & (est_meas_window>1))
+                est_meas_window = est_meas_window[idx_gt_0]
+                meas_window = meas_window[idx_gt_0]
+                geom.MAPE = np.nanmean(np.abs(meas_window - est_meas_window) / meas_window) * 100
+
+                # save jac from xopt (without priors parts of it)
+                geom.total_jac = xopt.jac[:len(self.winidx), :]
+
+
+
+                #Shat,_,_ = self.calc_posterior(x,geom,meas)
+                #U =np.sqrt(np.diag(Shat))
+                #import matplotlib.pyplot as plt
+                #import pandas as pd
+                #rfl = self.fm.calc_rfl(xopt.x, geom, L_down_dir=None, L_down_dif=None)[0]
+                #plt.scatter(self.fm.RT.wl, self.fm.RT.bkg_rfl, color='red')
+                #plt.scatter(self.fm.RT.wl, rfl)
+                #plt.plot(self.fm.RT.wl, meas, color='k')
+                #plt.plot(self.fm.RT.wl , est_meas, c='red')
+                #plt.scatter(self.fm.instrument.wl_init, rfl)
+                #plt.ylabel('rho-dif-dir')
+                #plt.xlabel('wavelength [nm]')
+                #df = pd.DataFrame(data=self.fm.RT.wl, columns=['wl'])
+                #df['meas'] = meas
+                #df['est_meas'] = est_meas
+                #print(xopt)
+                #plt.show()
+
+
+                #cov = Shat
+                #stddev = np.sqrt(np.diag(cov))
+                #corr = cov / np.outer(stddev, stddev)
+                #corr = np.nan_to_num(corr)
+                #plt.figure(figsize=(8, 6))
+                #plt.imshow(corr, cmap='bwr', vmin=-1, vmax=1)
+                #plt.colorbar(label='Correlation')
+                #plt.title('Posterior Parameter Correlation Matrix')
+                #plt.xlabel('Parameter Index')
+                #plt.ylabel('Parameter Index')
+                #plt.grid(False)
+                #plt.show()
+                
+                #data = []
+                #import matplotlib.pyplot as plt
+                #for i in range(min(geom.total_jac.shape[1], 29)):
+                #    if i == 4 or i >=25:
+                #        plt.plot(geom.total_jac[:, i], label=f'Param {i}')
+                #        data.append(geom.total_jac[:,i])
+                #import pandas as pd
+                #data = np.array(data)
+                #df = pd.DataFrame(data=data.T, columns=['idx1', 'idx2', 'idx3', 'idx4', 'idx5', 'idx6', 'idx7'])
+
+
+                # David note here on computing Matrix A (averaging kernel)
+                #geom.total_jac = xopt.jac[:len(self.winidx), :] # from '2 point method'
+                #K = geom.total_jac # from '2 point method'
+                #Seps = self.fm.Seps(x, meas, geom)
+                #Seps = Seps[np.ix_(self.winidx, self.winidx)]
+                #Seps_inv = svd_inv(Seps, hashtable=self.hashtable, max_hash_size=self.max_table_size)
+                #Shat = np.linalg.pinv(K.T.dot(Seps_inv).dot(K))    
+                #G = Shat.dot(K.T).dot(Seps_inv)
+                #A = G @ K
+                #import pdb
+                #pdb.set_trace()
+
+
+
                 x_full_solution = self.full_statevector(xopt.x)
                 trajectory.append(x_full_solution)
                 solutions.append(trajectory)

@@ -23,10 +23,10 @@ from __future__ import annotations
 
 import logging
 
+import math
 import numpy as np
 
-from isofit.core import units
-from isofit.core.common import eps
+from isofit.core.common import eps, resample_spectrum
 from isofit.radiative_transfer.engines import Engines
 
 Logger = logging.getLogger(__file__)
@@ -124,7 +124,7 @@ class RadiativeTransfer:
             self.init.append(sv.init)
             self.prior_sigma.append(sv.prior_sigma)
             self.prior_mean.append(sv.prior_mean)
-
+        
         self.bounds = np.array(self.bounds)
         self.scale = np.array(self.scale)
         self.init = np.array(self.init)
@@ -145,10 +145,6 @@ class RadiativeTransfer:
     def Sa(self):
         """Pull the priors from each of the individual RTs."""
         return np.diagflat(np.power(np.array(self.prior_sigma), 2))
-
-    def Sb(self):
-        """Uncertainty due to unmodeled variables."""
-        return np.diagflat(np.power(self.bval, 2))
 
     def get_shared_rtm_quantities(self, x_RT, geom):
         """Return only the set of RTM quantities (transup, sphalb, etc.) that are contained
@@ -181,6 +177,7 @@ class RadiativeTransfer:
         L_dif_dir,
         L_dir_dif,
         L_dif_dif,
+        L_slope_down,
         r,
         geom,
     ):
@@ -188,16 +185,25 @@ class RadiativeTransfer:
         Physics-based forward model to calculate at-sensor radiance.
         Includes topography, background reflectance, and glint.
         """
-        # Adjacency effects
-        # ToDo: we need to think about if we want to obtain the background reflectance from the Geometry object
-        #  or from the surface model, i.e., the same way as we do with the target pixel reflectance
 
-        rho_dir_dif = (
-            geom.bg_rfl if isinstance(geom.bg_rfl, np.ndarray) else rho_dir_dir
-        )
-        rho_dif_dif = (
-            geom.bg_rfl if isinstance(geom.bg_rfl, np.ndarray) else rho_dif_dir
-        )
+        # Adjacency effects and background contributions
+        if geom.rho_e is not None:
+            rho_dif_dif = geom.rho_e
+            rho_dir_dif = geom.rho_e 
+            rho_terrain = geom.rho_terrain
+        else:
+            rho_dif_dif = rho_dif_dir 
+            rho_dir_dif = rho_dif_dir
+            rho_terrain = rho_dif_dir
+
+        # testing with equal to target pixel
+        #rho_dif_dif = rho_dif_dir #NOTE testing only 
+        #rho_dir_dif = rho_dif_dir #NOTE testing only
+        #rho_terrain = rho_dif_dir
+
+        #import matplotlib.pyplot as plt
+        #plt.scatter(self.wl, self.bkg_rfl)
+        #plt.show()
 
         # Atmospheric path radiance
         L_atm = self.get_L_atm(x_RT, geom)
@@ -212,6 +218,10 @@ class RadiativeTransfer:
             rho_dif_dif = rho_dir_dir
             # eliminate spherical albedo and one reflectance term from numerator if using 1-component model
             atm_surface_scattering = 1
+
+        # Compute L_Slope (viewshed radiance). approx that L_tot is reasonable estimate for neighborhood.
+        ct = max(0,((1 + np.cos(np.radians(geom.slope))) / 2 ) - geom.svf)
+        L_slope = (L_slope_down * ct * rho_terrain)
 
         # Thermal transmittance
         L_up = Ls * (r["transm_up_dir"] + r["transm_up_dif"])
@@ -246,18 +256,52 @@ class RadiativeTransfer:
         # L_atm + (L_tot * rho_dir_dir) / (1 - S * rho_dir_dir) + L_up,
         # with L_tot being the total radiance (downward * upward, direct + diffuse).
 
+
         # TOA radiance model
+        # NOTE: this energy returned at sensor...
         ret = (
             L_atm
             + L_dir_dir * rho_dir_dir
             + L_dif_dir * rho_dif_dir
             + L_dir_dif * rho_dir_dif
             + L_dif_dif * rho_dif_dif
+            + L_slope * rho_dif_dir 
             + (L_tot * atm_surface_scattering * rho_dif_dif) / (1 - s_alb * rho_dif_dif)
             + L_up
         )
 
         return ret
+
+    def rdn_to_rho(self, rdn, coszen, solar_irr=None):
+        """Function to convert a radiance vector to transmittance.
+
+        Args:
+            rdn:       input data vector in radiance
+            coszen:    cosine of solar zenith angle
+            solar_irr: solar irradiance vector (optional)
+
+        Returns:
+            Data vector converted to transmittance
+        """
+        if solar_irr is None:
+            solar_irr = self.solar_irr
+
+        return rdn * np.pi / (solar_irr * coszen)
+
+    def rho_to_rdn(self, rho, coszen, solar_irr=None):
+        """Function to convert a transmittance vector to radiance.
+
+        Args:
+            rho:       input data vector in transmittance
+            coszen:    cosine of solar zenith angle
+            solar_irr: solar irradiance vector (optional)
+
+        Returns:
+            Data vector converted to radiance
+        """
+        if solar_irr is None:
+            solar_irr = self.solar_irr
+        return (solar_irr * coszen) / np.pi * rho
 
     def get_L_atm(self, x_RT: np.array, geom: Geometry) -> np.array:
         """Get the interpolated modeled atmospheric path radiance.
@@ -271,8 +315,7 @@ class RadiativeTransfer:
         """
         L_atms = []
 
-        verified_geom = geom.verify(self.coszen)
-        coszen, cos_i = verified_geom["coszen"], verified_geom["cos_i"]
+        coszen, cos_i = geom.check_coszen_and_cos_i(self.coszen)
 
         for RT in self.rt_engines:
             if RT.treat_as_emissive:
@@ -285,7 +328,7 @@ class RadiativeTransfer:
                     L_atm = r["rhoatm"]
                 else:
                     rho_atm = r["rhoatm"]
-                    L_atm = units.transm_to_rdn(rho_atm, coszen, self.solar_irr)
+                    L_atm = self.rho_to_rdn(rho_atm, coszen)
                 L_atms.append(L_atm)
         return np.hstack(L_atms)
 
@@ -305,13 +348,7 @@ class RadiativeTransfer:
         L_downs_dir = []
         L_downs_dif = []
 
-        # Check coszen against cos_i
-        verified_geom = geom.verify(self.coszen)
-        coszen, cos_i, skyview_factor = (
-            verified_geom["coszen"],
-            verified_geom["cos_i"],
-            verified_geom["skyview_factor"],
-        )
+        coszen, cos_i = geom.check_coszen_and_cos_i(self.coszen)
 
         for RT in self.rt_engines:
             if RT.treat_as_emissive:
@@ -325,16 +362,10 @@ class RadiativeTransfer:
                     L_down_dif = r["transm_down_dif"]
                 else:
                     # Transform downward transmittance to radiance
-                    L_down_dir = units.transm_to_rdn(
-                        r["transm_down_dir"], coszen, self.solar_irr
-                    )
-                    L_down_dif = units.transm_to_rdn(
-                        r["transm_down_dif"], coszen, self.solar_irr
-                    )
-
-                # Apply sky view factor to downward diffuse for 1C case.
-                L_down_dif *= skyview_factor
-
+                    L_down_dir = self.rho_to_rdn(r["transm_down_dir"], coszen)
+                    L_down_dif = self.rho_to_rdn(r["transm_down_dif"], coszen)
+                
+                L_down_dif = L_down_dif
                 L_down = L_down_dir + L_down_dif
 
                 L_downs.append(L_down)
@@ -343,7 +374,7 @@ class RadiativeTransfer:
 
         return np.hstack(L_downs), np.hstack(L_downs_dir), np.hstack(L_downs_dif)
 
-    def get_L_coupled(self, r: dict, geom: Geometry):
+    def get_L_coupled(self, r: dict, x_surface:np.ndarray, geom: Geometry):
         """Get the interpolated radiance terms on the sun-to-surface-to-sensor path.
         These follow the physics as presented in Guanter (2006), Vermote et al. (1997), and Tanre et al. (1983).
 
@@ -360,12 +391,7 @@ class RadiativeTransfer:
             L_dif_dif => downward diffuse * upward diffuse
         """
         # Check coszen against cos_i
-        verified_geom = geom.verify(self.coszen)
-        coszen, cos_i, skyview_factor = (
-            verified_geom["coszen"],
-            verified_geom["cos_i"],
-            verified_geom["skyview_factor"],
-        )
+        coszen, cos_i = geom.check_coszen_and_cos_i(self.coszen)
 
         # radiances along all optical paths
         L_coupled = []
@@ -386,21 +412,54 @@ class RadiativeTransfer:
         else:
             for key in self.rt_engines[0].coupling_terms:
                 L_coupled.append(
-                    units.transm_to_rdn(r[key], coszen=coszen, solar_irr=self.solar_irr)
+                    self.solar_irr * coszen / np.pi * r[key]
                     if self.rt_engines[0].rt_mode == "transm"
                     else r[key]
                 )
+        if len(x_surface) >10: # this is is SnowSurface 
+            # NOTE: BW HERE
+            # update cos_i based on x_surface
+            # solve for aspect via sin(aspect) and cos(aspect)
+            aspect = np.degrees(math.atan2(x_surface[0], x_surface[1]))
+            if (aspect < 0.0):
+                aspect += 360.0
+            aspect = np.radians(aspect)
+            cos_i = (np.sin(np.radians(geom.solar_zenith)) * np.sin(np.radians(geom.slope)) *
+                    np.cos(np.radians(geom.solar_azimuth) - aspect) +
+                    np.cos(np.radians(geom.solar_zenith)) * np.cos(np.radians(geom.slope)))
+        else: # is IceSurface class
+            cos_i = x_surface[0]
 
-        # Assigning coupled terms, unscaling and rescaling downward direct radiance by local solar zenith angle.
-        # Downward diffuse components are scaled by viewable sky fraction (i.e., "ungula" of viewable sky in solid geometry terms).
+        cos_i = max(0., min(cos_i, 1.0)) 
+
+        #import matplotlib.pyplot as plt
+        #plt.scatter(self.wl, self.bkg_dh, color='blue')
+        #plt.scatter(self.wl, self.bkg_hh, color='red')
+        #plt.show()
+        
+        # update cosi based on ray-tracing nearby terrain.
+        # zero is shadow , one is illuminated data
+        cos_i = cos_i * geom.shadow
+        
+        # cosi_bkg, for now this is mu0
+        # I think it is the safest assumption because this removes the dependence of optimal terrain
+        # Another way is we could use aggregated terrain data over similar length scales for rho_e and rho_terrain.
+        cosi_bkg = coszen 
+
+        # NOTE: technically there is also some interaction i thnk of SVF for dif-dif.
+        # But we are assuming the svf of bkg ~ 1.0, and so it should just be the svf of the target pixel contributing.
+
+        # assigning coupled terms, unscaling and rescaling downward direct radiance by local solar zenith angle
         L_dir_dir = L_coupled[0] / coszen * cos_i
-        L_dif_dir = L_coupled[1] * skyview_factor
-        L_dir_dif = L_coupled[2] / coszen * cos_i
-        L_dif_dif = L_coupled[3] * skyview_factor
+        L_dif_dir = L_coupled[1] * geom.svf
+        L_dir_dif = L_coupled[2] / coszen * cosi_bkg
+        L_dif_dif = L_coupled[3] * geom.svf
 
         return L_dir_dir, L_dif_dir, L_dir_dif, L_dif_dif
 
-    def calc_RT_quantities(self, x_RT: np.ndarray, geom: Geometry):
+
+
+    def calc_RT_quantities(self, x_RT: np.ndarray, x_surface: np.ndarray, geom: Geometry):
         """Retrieves the RT quantities including the LUT sample (r),
         and the radiances (L). This function handles the hand-off between
         the 1c and 4c model.
@@ -415,7 +474,7 @@ class RadiativeTransfer:
         r = self.get_shared_rtm_quantities(x_RT, geom)
 
         # Default: get directional radiances
-        L_dir_dir, L_dif_dir, L_dir_dif, L_dif_dif = self.get_L_coupled(r, geom)
+        L_dir_dir, L_dif_dir, L_dir_dif, L_dif_dif = self.get_L_coupled(r, x_surface, geom)
         L_tot = L_dir_dir + L_dif_dir + L_dir_dif + L_dif_dif
 
         # Handle case for 1c vs 4c model
@@ -424,8 +483,9 @@ class RadiativeTransfer:
             L_tot, L_down_dir, L_down_dif = self.get_L_down_transmitted(x_RT, geom)
         else:
             # 4c model w/in else clause
-            L_down_dir = L_dir_dir + L_dif_dir
-            L_down_dif = L_dif_dir + L_dif_dir
+            #L_down_dir = L_dir_dir + L_dif_dir
+            #L_down_dif = L_dif_dir + L_dif_dir
+            L_slope_down, L_down_dir, L_down_dif = self.get_L_down_transmitted(x_RT, geom)
 
         return (
             r,
@@ -436,9 +496,10 @@ class RadiativeTransfer:
             L_dif_dir,
             L_dir_dif,
             L_dif_dif,
+            L_slope_down
         )
 
-    def drdn_dRT(self, x_RT, geom, rho_dir_dir, rho_dif_dir, Ls, rdn):
+    def drdn_dRT(self, x_RT, x_surface, geom, rho_dir_dir, rho_dif_dir, Ls, rdn):
         """Derivative of estimated radiance w.r.t. RT statevector elements.
         We use a numerical approach to approximate dRT with a constant surface
         reflectance. This is a reasonable approx. for the multicomponent surface.
@@ -459,7 +520,8 @@ class RadiativeTransfer:
                 L_dif_dir,
                 L_dir_dif,
                 L_dif_dif,
-            ) = self.calc_RT_quantities(x_RT_perturb, geom)
+                L_slope,
+            ) = self.calc_RT_quantities(x_RT_perturb, x_surface, geom)
 
             # Surface state is held constant?
             rdne = self.calc_rdn(
@@ -472,6 +534,7 @@ class RadiativeTransfer:
                 L_dif_dir,
                 L_dir_dif,
                 L_dif_dif,
+                L_slope,
                 r,
                 geom,
             )
@@ -481,7 +544,7 @@ class RadiativeTransfer:
 
         return K_RT
 
-    def drdn_dRTb(self, x_RT, geom, rho_dir_dir, rho_dif_dir, Ls, rdn):
+    def drdn_dRTb(self, x_RT, x_surface, geom, rho_dir_dir, rho_dif_dir, Ls, rdn):
         """Derivative of estimated rdn w.r.t. H2O_ABSCO
 
         Currently, the K_b matrix only covers forward model derivatives
@@ -518,7 +581,8 @@ class RadiativeTransfer:
                         L_dif_dir,
                         L_dir_dif,
                         L_dif_dif,
-                    ) = self.calc_RT_quantities(x_RT_perturb, geom)
+                        L_slope,
+                    ) = self.calc_RT_quantities(x_RT_perturb,x_surface, geom)
 
                     rdne = self.calc_rdn(
                         x_RT_perturb,
@@ -530,6 +594,7 @@ class RadiativeTransfer:
                         L_dif_dir,
                         L_dir_dif,
                         L_dif_dif,
+                        L_slope,
                         r,
                         geom,
                     )

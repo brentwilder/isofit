@@ -1,9 +1,11 @@
 from isofit.surface.surface import Surface as BaseSurface
+from isofit.surface.surface_additive_glint import AdditiveGlintSurface
 from isofit.surface.surface_glint_model import GlintModelSurface
 from isofit.surface.surface_lut import LUTSurface
 from isofit.surface.surface_multicomp import MultiComponentSurface
 from isofit.surface.surface_thermal import ThermalSurface
-
+from isofit.surface.surface_snow import SnowSurface
+from isofit.surface.surface_ice import IceSurface
 
 def Surface(config):
     """
@@ -27,6 +29,9 @@ def Surface(config):
     elif category == "multicomponent_surface":
         return MultiComponentSurface(config)
 
+    elif category == "additive_glint_surface":
+        return AdditiveGlintSurface(config)
+
     elif category == "glint_model_surface":
         return GlintModelSurface(config)
 
@@ -35,6 +40,12 @@ def Surface(config):
 
     elif category == "lut_surface":
         return LUTSurface(config)
+    
+    elif category == "snow_surface":
+        return SnowSurface(config)
+
+    elif category == "ice_surface":
+        return IceSurface(config)
 
     else:
         # No need to be more specific - should have been checked in config already

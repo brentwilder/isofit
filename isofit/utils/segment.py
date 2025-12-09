@@ -88,7 +88,7 @@ def segment_chunk(
 
     mu = x[use, :].mean(axis=0)
     C = np.cov(x[use, :], rowvar=False)
-    [v, d] = scipy.linalg.eigh(C, driver="evr")
+    [v, d] = scipy.linalg.eigh(C)
 
     # Determine segmentation compactness scaling based on eigenvalues
     # Override with a floor value to prevent zeros
@@ -191,7 +191,6 @@ def segment(
     # Open input data, get dimensions
     in_img = envi.open(envi_header(in_file), in_file)
     meta = in_img.metadata
-    del in_img
     nl, nb, ns = [int(meta[n]) for n in ("lines", "bands", "samples")]
 
     # Start up a ray instance for parallel work

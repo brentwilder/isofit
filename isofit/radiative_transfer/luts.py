@@ -13,9 +13,7 @@ import numpy as np
 import xarray as xr
 from netCDF4 import Dataset
 
-from isofit import __version__
-
-Logger = logging.getLogger(__name__)
+Logger = logging.getLogger(__file__)
 
 
 # Statically store expected keys of the LUT file and their fill values
@@ -61,8 +59,7 @@ class Create:
         onedim: dict = {},
         alldim: dict = {},
         zeros: List[str] = [],
-        compression: str = "zlib",
-        complevel: int = None,
+        reduce: bool = ["fwhm"],
     ):
         """
         Prepare a LUT netCDF
@@ -85,16 +82,10 @@ class Create:
             Dictionary of multi-dimensional data. Appends/replaces to the current Create.alldim list.
         zeros : List[str], optional, default=[]
             List of zero values. Appends to the current Create.zeros list.
-        compression : str, default="zlib"
-            Compression method to use to the NetCDF. Check https://unidata.github.io/netcdf4-python/
-            for available options. Currently, must use h5py <= 3.14.0
-        complevel : int, default=None
-            Compression to use. Impact and levels vary per method.
+        reduce : bool or list, optional, default=['fwhm']
+            Reduces the initialized Dataset by dropping the variables to reduce overall memory usage.
+            If True, drops all variables. If list, drop everything but these.
         """
-        # Track the ISOFIT version that created this LUT
-        attrs["ISOFIT version"] = __version__
-        attrs["ISOFIT status"] = "<incomplete>"
-
         self.file = file
         self.wl = wl
         self.grid = grid
@@ -106,9 +97,6 @@ class Create:
         self.consts = {**Keys.consts, **consts}
         self.onedim = {**Keys.onedim, **onedim}
         self.alldim = {**Keys.alldim, **alldim}
-
-        self.compression = compression
-        self.complevel = complevel
 
         # Save ds for backwards compatibility (to work with extractGrid, extractPoints)
         self.initialize()
@@ -128,8 +116,7 @@ class Create:
                 dimensions=dims,
                 fill_value=fill_value,
                 chunksizes=chunksizes,
-                compression=self.compression,
-                complevel=self.complevel,
+                compression="zlib",
             )
             var[:] = vals
 
@@ -198,14 +185,9 @@ class Create:
         """
         self.hold.append((point, data))
 
-    def flush(self, finalize: bool = False) -> None:
+    def flush(self) -> None:
         """
         Flushes the (point, data) pairs held in the hold list to the LUT netCDF.
-
-        Parameters
-        ----------
-        finalize : bool, default=False
-            Calls the `finalize` function
         """
         unknowns = set()
         with Dataset(self.file, "a") as ds:
@@ -231,9 +213,6 @@ class Create:
                 f"Attempted to assign a key that is not recognized, skipping: {key}"
             )
 
-        if finalize:
-            self.finalize()
-
     def writePoint(self, point: np.ndarray, data: dict) -> None:
         """
         Queues a point and immediately flushes to disk.
@@ -247,44 +226,6 @@ class Create:
         """
         self.queuePoint(point, data)
         self.flush()
-
-    def setAttr(self, key: str, value: Any) -> None:
-        """
-        Sets an attribute in the netCDF
-
-        Parameters
-        ----------
-        key : str
-            Key to set
-        value : any
-            Value to set
-        """
-        self.attrs[key] = value
-        with Dataset(self.file, "a") as ds:
-            ds.setncattr(key, value)
-
-    def getAttr(self, key: str) -> Any:
-        """
-        Gets an attribute from the netCDF
-
-        Parameters
-        ----------
-        key : str
-            Key to get
-
-        Returns
-        -------
-        any | None
-            Retrieved attribute from netCDF, if it exists
-        """
-        with Dataset(self.file, "r") as ds:
-            return ds.getncattr(key)
-
-    def finalize(self):
-        """
-        Finalizes the netCDF by writing any remaining attributes to disk
-        """
-        self.setAttr("ISOFIT status", "success")
 
     def __getitem__(self, key: str) -> Any:
         """
@@ -330,13 +271,9 @@ def findSlice(dim, val):
 
     # Subselect the two points encompassing this interp point
     b = np.searchsorted(dim * orientation, val * orientation)
+    a = b - 1
 
-    # Handle edge cases when val equals first or last lut dim value
-    if val <= dim[0]:
-        return slice(b, b + 2)
-
-    else:
-        return slice(b - 1, b + 1)
+    return slice(a, b + 1)
 
 
 def optimizedInterp(ds, strat):
@@ -356,20 +293,6 @@ def optimizedInterp(ds, strat):
     """
     for key, val in strat.items():
         dim = ds[key]
-
-        if val <= dim[0]:
-            Logger.warning(
-                f"Scene value for key: {key} of {round(val, 2)} "
-                f"is less or equal to minimum LUT value {np.round(dim[0].data, 2)}. "
-                "Solutions will use value interpolated to minimum LUT value"
-            )
-
-        elif val >= dim[-1]:
-            Logger.warning(
-                f"Scene value for key: {key} of {round(val, 2)} "
-                f"is greater or equal to maximum LUT value {np.round(dim[-1].data, 2)}. "
-                "Solutions will use value interpolated to maximum LUT value"
-            )
 
         if isinstance(val, list):
             a = findSlice(dim, val[0])
@@ -749,20 +672,6 @@ def load(
         Logger.debug(f"Using Xarray to load: {file}")
         ds = xr.open_dataset(file, mode=mode, lock=lock, **kwargs)
 
-    status = ds.attrs.get("ISOFIT status", "<not set>")
-    if status != "success":
-        Logger.warning(
-            f"The LUT status is {status}, there may be issues with it downstream"
-        )
-        Logger.debug(
-            "To fix this error and you know the the LUT is correct, set NetCDF attribute 'ISOFIT status' to 'success'"
-        )
-
-    version = ds.attrs.get("ISOFIT version", "<not set>")
-    Logger.debug(
-        f"This LUT was created with ISOFIT version {version}, you are running ISOFIT {__version__}"
-    )
-
     # Calculate coupling before subsetting
     if "before" in coupling:
         couple(ds)
@@ -836,7 +745,7 @@ def load(
 
     dims = ds.drop_dims("wl").dims
 
-    # Create the point dimension -> Coords now len(points)
+    # Create the point dimension
     ds = ds.stack(point=dims).transpose("point", "wl")
 
     if load:
@@ -892,20 +801,13 @@ def extractPoints(ds: xr.Dataset, names: bool = False) -> np.array:
 def extractGrid(ds: xr.Dataset) -> dict:
     """
     Extracts the LUT grid from a Dataset
-
-    Parameters
-    ----------
-    ds: xr.Dataset
-        LUT Dataset object. Carried stacked: Dimensions wl, points
-
     """
     grid = {}
     for dim, vals in ds.coords.items():
         if dim in {"wl", "point"}:
             continue
         if len(vals.data.shape) > 0 and vals.data.shape[0] > 1:
-            # Unique call sorts and filters. Faster than unstacking ds.
-            grid[dim] = np.unique(vals.data)
+            grid[dim] = vals.data
     return grid
 
 

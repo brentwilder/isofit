@@ -26,7 +26,6 @@ from datetime import datetime
 
 import numpy as np
 
-from isofit.core import units
 from isofit.core.common import resample_spectrum
 from isofit.core.fileio import IO
 from isofit.data import env
@@ -74,15 +73,15 @@ class SixSRT(RadiativeTransferEngine):
             Logger.debug(f"Setting SIXS_DIR={env.sixs}")
             os.environ["SIXS_DIR"] = env.sixs
         elif (current := os.path.abspath(current)) != env.sixs:
-            Logger.warning(
-                "The environment variable $SIXS_DIR does not match the ISOFIT ini. It is recommended to make these match, though not required. The ENV path will be the one used."
+            Logger.error(
+                "WARNING: The environment variable $SIXS_DIR does not match the ISOFIT ini"
             )
-            Logger.warning(f"ENV: {current}")
-            Logger.warning(f"INI: {env.sixs}")
-            Logger.warning(
-                "Please either set the ENV to that INI value, or update the INI with the ENV via:"
+            Logger.error(f"ENV: {current}")
+            Logger.error(f"INI: {env.sixs}")
+            Logger.error(
+                "This may cause issues, please either set the env to the ini, or override the ini to the env using:"
             )
-            Logger.warning("  isofit --path sixs $SIXS_DIR")
+            Logger.error("  isofit --sixs $SIXS_DIR ...")
 
         self.modtran_emulation = modtran_emulation
 
@@ -177,7 +176,7 @@ class SixSRT(RadiativeTransferEngine):
                 "Make sure to add the examples folder to ISOFIT's root directory before proceeding."
             )
         iwl, irr = irr.T
-        irr = irr / 10.0  # convert from mW/m2/nm to uW/nm/cm2
+        irr = irr / 10.0  # convert, uW/nm/cm2
         irr = irr / self.irr_factor**2  # consider solar distance
         solar_irr = resample_spectrum(irr, iwl, self.wl, self.fwhm)
 
@@ -214,8 +213,8 @@ class SixSRT(RadiativeTransferEngine):
             "alt": min(self.engine_config.alt, 99),
             "atm_file": None,
             "abscf_data_directory": None,
-            "wlinf": units.nm_to_micron(wlinf),
-            "wlsup": units.nm_to_micron(wlsup),
+            "wlinf": wlinf / 1000.0,  # convert to nm
+            "wlsup": wlsup / 1000.0,
         }
 
         # Assume geometry values are provided by the config
@@ -233,7 +232,7 @@ class SixSRT(RadiativeTransferEngine):
         # Special cases
 
         if "H2OSTR" in vals:
-            vals["h2o_mm"] = units.cm_to_mm(vals["H2OSTR"])
+            vals["h2o_mm"] = vals["H2OSTR"] * 10.0
 
         if "surface_elevation_km" in vals:
             vals["elev"] = vals["surface_elevation_km"]
@@ -267,7 +266,7 @@ class SixSRT(RadiativeTransferEngine):
 
         with open(bash, "w") as f:
             f.write("#!/usr/bin/bash\n")
-            f.write(f'"{sixS}" < "{inpt}" > "{outp}"\n')
+            f.write(f"{sixS} < {inpt} > {outp}\n")
             f.write("cd $cwd\n")
 
         return f"bash {bash}"
@@ -325,7 +324,7 @@ class SixSRT(RadiativeTransferEngine):
 
         with open(inpt, "r") as f:
             solzen = float(f.readlines()[1].strip().split()[0])
-        coszen = np.cos(np.deg2rad(solzen))
+        coszen = np.cos(solzen / 360 * 2.0 * np.pi)
 
         # `data` stores the return values, `append` will append to existing keys and creates them if they don't
         # Easy append to keys whether they exist or not
