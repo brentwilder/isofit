@@ -41,6 +41,8 @@ class SnowSurface(MultiComponentSurface):
 
     Accurate background reflectances are assumed within the apply-oe pipeline of this branch. 
 
+    NOTE: disort keys hdrf and brdf is sloppy and should be changed soon to rho_dd and rho_hd.
+
 
     """
 
