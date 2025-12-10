@@ -1,10 +1,10 @@
-name: isofit_env
+name: isosnow
 
 channels: &id1
-  - http://conda.anaconda.org/conda-forge
+  - conda-forge
 
 dependencies:
-  - python>=3.8
+  - python>=3.10
   - pip
   - click
   - dask
@@ -21,6 +21,11 @@ dependencies:
   - spectral>=0.19
   - xarray
   - zarr>=2,<3
+  - rasterio
+  - pysolar
+  - ephem
+  - ipykernel
+  - joblib
 
   - pip:
     - ray[default]
