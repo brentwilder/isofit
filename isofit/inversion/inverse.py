@@ -454,10 +454,11 @@ class Inversion:
                 meas_window = meas_window[idx_gt_0]
                 geom.MAPE = np.nanmean(np.abs(meas_window - est_meas_window) / meas_window) * 100
 
+                # save the total (blue sky), direct(black sky), and diffuse (white sky) albedos
+                geom.a_total, geom.a_direct, geom.a_diffuse = self.fm.calc_snow_albedo(xopt.x, geom)
+
                 # save jac from xopt (without priors parts of it)
                 geom.total_jac = xopt.jac[:len(self.winidx), :]
-
-
 
                 #Shat,_,_ = self.calc_posterior(x,geom,meas)
                 #U =np.sqrt(np.diag(Shat))

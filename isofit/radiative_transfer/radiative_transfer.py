@@ -473,6 +473,8 @@ class RadiativeTransfer:
         # Propogate LUT
         r = self.get_shared_rtm_quantities(x_RT, geom)
 
+        coszen, cos_i = geom.check_coszen_and_cos_i(self.coszen)
+
         # Default: get directional radiances
         L_dir_dir, L_dif_dir, L_dir_dif, L_dif_dif = self.get_L_coupled(r, x_surface, geom)
         L_tot = L_dir_dir + L_dif_dir + L_dir_dif + L_dif_dif
@@ -486,6 +488,23 @@ class RadiativeTransfer:
             #L_down_dir = L_dir_dir + L_dif_dir
             #L_down_dif = L_dif_dir + L_dif_dir
             L_slope_down, L_down_dir, L_down_dif = self.get_L_down_transmitted(x_RT, geom)
+            # correct downward for surface
+            if len(x_surface) >10: # this is is SnowSurface 
+                aspect = np.degrees(math.atan2(x_surface[0], x_surface[1]))
+                if (aspect < 0.0):
+                    aspect += 360.0
+                aspect = np.radians(aspect)
+                cos_i = (np.sin(np.radians(geom.solar_zenith)) * np.sin(np.radians(geom.slope)) *
+                        np.cos(np.radians(geom.solar_azimuth) - aspect) +
+                        np.cos(np.radians(geom.solar_zenith)) * np.cos(np.radians(geom.slope)))
+            else: # is IceSurface class
+                cos_i = x_surface[0]
+            cos_i = max(0., min(cos_i, 1.0)) 
+            cos_i = cos_i * geom.shadow
+
+            L_down_dir = L_down_dir / coszen * cos_i
+            L_down_dif = L_down_dif * geom.svf
+
 
         return (
             r,

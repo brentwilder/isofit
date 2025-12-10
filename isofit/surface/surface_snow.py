@@ -125,6 +125,20 @@ class SnowSurface(MultiComponentSurface):
             version="mlg"
         )
 
+        self.g_ah = VectorInterpolator(
+            grid_input=grid,
+            data_input=ds['a_hd'].values,
+            version="mlg"
+        )
+
+        self.g_ad = VectorInterpolator(
+            grid_input=grid,
+            data_input=ds['a_dd'].values,
+            version="mlg"
+        )
+
+
+
         # Load in Endmembers data
         with open(env.path("data", f"pv_{disort_sensor}.pkl"), 'rb') as f:
             self.pv = pickle.load(f)
@@ -282,6 +296,68 @@ class SnowSurface(MultiComponentSurface):
         return cosi, cosv
 
 
+    def calc_snow_albedo(self, x_surface, geom, L_down_dir=None, L_down_dif=None):
+        """
+        Returns broadband snow albedos
+        """
+        # catch potential invalid values before LUT
+        if x_surface[0] >= 1.0:
+            x_surface[0] = 1.0
+        if x_surface[1] >= 1.0:
+            x_surface[1] = 1.0
+        if x_surface[0] <= -1.0:
+            x_surface[0] = -1.0
+        if x_surface[1] <= -1.0:
+            x_surface[1] = -1.0
+        if x_surface[2] <= 30.0:
+            x_surface[2] = 30.0
+        if x_surface[2] >= 1500.0:
+            x_surface[2] = 1500.0
+        if x_surface[3] >= 25.0:
+            x_surface[3] = 25.0
+        if x_surface[3] <= 0.0:
+            x_surface[3] = 0.0
+        if x_surface[4] >= 4000.0:
+            x_surface[4] = 4000.0
+        if x_surface[4] <= 0.0:
+            x_surface[4] = 0.0
+        if x_surface[5] >= 6e5:
+            x_surface[5] = 6e5
+        if x_surface[5] <= 0.0:
+            x_surface[5] = 0.0
+            
+        # calculate all relevant angles
+        vza = geom.observer_zenith
+        raa = geom.relative_azimuth
+        vaa = geom.observer_azimuth
+        sza = geom.solar_zenith
+        saa = geom.solar_azimuth
+        slope = geom.slope
+        cosi, cosv = self.calc_new_angles(x_surface,
+                                          sza, vza, 
+                                          saa, vaa,
+                                          slope, geom)
+        
+        # correct for RAA way DISORT is expecting it.
+        disort_raa = 180 - raa
+        a_dir = self.g_ad(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+                                             disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
+        
+        a_dif = self.g_ah(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+                                             disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
+        
+        # Compute diffuse fraction
+        L_total = (L_down_dif+L_down_dir)
+        k = L_down_dif / L_total
+        alb_blue = (1-k)*a_dir + k*a_dif
+        
+        # integrate
+        total_albedo = np.trapezoid(alb_blue * L_total, dx=1) / np.trapezoid(L_total, dx=1)
+        direct_albedo = np.trapezoid(a_dir * L_down_dir, dx=1) / np.trapezoid(L_down_dir, dx=1)
+        diffuse_albedo = np.trapezoid(a_dif * L_down_dif, dx=1) / np.trapezoid(L_down_dif, dx=1)
+        
+        return total_albedo, direct_albedo, diffuse_albedo
+
 
     def calc_lamb(self, x_surface, geom):
         """Lambertian reflectance."""
@@ -302,12 +378,12 @@ class SnowSurface(MultiComponentSurface):
         rho_dir, rho_dif = self.calc_rfl(x_surface, geom)
         svf = geom.svf
         cosi,_ = self.calc_new_angles(x_surface, 
-                                                geom.solar_zenith, 
-                                                geom.observer_zenith,
-                                                geom.solar_azimuth, 
-                                                geom.observer_azimuth, geom.slope)
+                                      geom.solar_zenith, 
+                                      geom.observer_zenith,
+                                      geom.solar_azimuth, 
+                                      geom.observer_azimuth, geom.slope)
 
-        rdn = L_down_dir*rho_dir*cosi + L_down_dif*rho_dif*svf
+        rdn = L_down_dir*rho_dir + L_down_dif*rho_dif
 
         # perturb each element of the surface state vector (finite difference)
         drdn_dsurface = []
@@ -324,8 +400,8 @@ class SnowSurface(MultiComponentSurface):
                                                   geom.solar_azimuth, 
                                                   geom.observer_azimuth, geom.slope)
 
-            rdn_perturb = ((rho_dir_p * L_down_dir * cosi_perturb) + 
-                           (rho_dif_p * L_down_dif * svf))
+            rdn_perturb = ((rho_dir_p * L_down_dir / cosi * cosi_perturb) + 
+                           (rho_dif_p * L_down_dif))
             
             drdn_dsurface.append((rdn_perturb - rdn) / eps)
 

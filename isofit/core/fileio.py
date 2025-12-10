@@ -424,6 +424,10 @@ class IO:
                 n_bands += 1 # BW NOTE, adding one for mean abs percent error
                 band_names.append('MAPE')
             
+            if element_name == "estimated_state_file":
+                n_bands += 3 # addeding in 3 albedo outputs
+                band_names.append("Total_Albedo", "Direct_Albedo", "Diffuse_Albedo")
+
             self.output_datasets[element_name] = SpectrumFile(
                 element,
                 write=True,
@@ -750,6 +754,8 @@ class IO:
 
             ############ Start with all of the 'independent' calculations
             if "estimated_state_file" in self.output_datasets:
+                albedos = np.array([geom.a_total, geom.a_direct, geom.a_diffuse])
+                state_est = np.append(state_est, np.array(albedos))
                 to_write["estimated_state_file"] = state_est
 
             if "path_radiance_file" in self.output_datasets:

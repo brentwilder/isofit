@@ -319,6 +319,27 @@ class ForwardModel:
 
         return self.surface.calc_rfl(x[self.idx_surface], geom, L_down_dir, L_down_dif)
 
+    def calc_snow_albedo(self, x, geom):
+        """Calculate the snow albedo. Note this is not full pixel albedo. Just snow."""
+        # Unpack state vector - Copy to not change x fm-wide
+        x_surface, x_RT, x_instrument = self.unpack(np.copy(x))
+
+        # Get RT quantities
+        (
+            r,
+            L_tot,
+            L_down_dir,
+            L_down_dif,
+            L_dir_dir,
+            L_dif_dir,
+            L_dir_dif,
+            L_dif_dif,
+            L_slope_down,
+        ) = self.RT.calc_RT_quantities(x_RT,x_surface, geom)
+
+        
+        return self.surface.calc_snow_albedo(x[self.idx_surface], geom, L_down_dir, L_down_dif)
+
     def calc_lamb(self, x, geom):
         """Calculate the Lambertian surface reflectance."""
 
