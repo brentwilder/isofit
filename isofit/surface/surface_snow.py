@@ -84,7 +84,6 @@ class SnowSurface(MultiComponentSurface):
 
         self.x_fixed = None
 
-        # load DISORT data to Jouni's interp class
         # NOTE: need to make this path based on sensoorr
         config = full_config.forward_model.instrument
         if config.wavelength_file is not None:
@@ -113,31 +112,11 @@ class SnowSurface(MultiComponentSurface):
             ds['lwc'].values,
         ]
 
-        self.g_hd = VectorInterpolator(
-            grid_input=grid,
-            data_input=ds['r_hd'].values,
-            version="mlg"
-        )
-
-        self.g_dd = VectorInterpolator(
-            grid_input=grid,
-            data_input=ds['r_dd'].values,
-            version="mlg"
-        )
-
-        self.g_ah = VectorInterpolator(
-            grid_input=grid,
-            data_input=ds['a_hd'].values,
-            version="mlg"
-        )
-
-        self.g_ad = VectorInterpolator(
-            grid_input=grid,
-            data_input=ds['a_dd'].values,
-            version="mlg"
-        )
-
-
+        # load DISORT data to Jouni's interp class.. two rfls and two albedos...
+        self.g_hd = VectorInterpolator(grid_input=grid,data_input=ds['r_hd'].values,version="mlg")
+        self.g_dd = VectorInterpolator(grid_input=grid,data_input=ds['r_dd'].values,version="mlg")
+        self.g_ah = VectorInterpolator(grid_input=grid,data_input=ds['a_hd'].values,version="mlg")
+        self.g_ad = VectorInterpolator(grid_input=grid,data_input=ds['a_dd'].values,version="mlg")
 
         # Load in Endmembers data
         with open(env.path("data", f"pv_{disort_sensor}.pkl"), 'rb') as f:
