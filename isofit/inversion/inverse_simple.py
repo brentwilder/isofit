@@ -426,6 +426,14 @@ def invert_simple(forward: ForwardModel, meas: np.array, geom: Geometry):
         surface, RT, instrument, x_surface, x_RT, x_instrument, meas, geom
     )
 
+    # BW
+    # add NDSI to geom here
+    green_idx = np.argmin(np.abs(forward.surface.wl - 550))
+    swir_idx = np.argmin(np.abs(forward.surface.wl - 1600))
+    green_rfl = rfl_est[green_idx]
+    swir_rfl = rfl_est[swir_idx]
+    geom.ndsi = (green_rfl - swir_rfl) / (green_rfl + swir_rfl)
+
     # Condition thermal part on the VSWIR portion. Only works for
     # Multicomponent surfaces. Finds the cluster nearest the VSWIR heuristic
     # inversion and uses it for the TIR suface initialization.

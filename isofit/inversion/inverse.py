@@ -380,6 +380,10 @@ class Inversion:
             #    ]
             #    x0[prior_subset_idx] = self.fm.surface.xa(x0, geom)[prior_subset_idx]
 
+            # Do not invert if not enough snow is present in pixel.
+            if geom.ndsi < 0.1:
+                return np.array([self.fm.init.copy()])
+
             trajectory.append(x0)
 
             x0 = x0[self.inds_free]
