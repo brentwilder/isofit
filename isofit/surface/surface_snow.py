@@ -41,9 +41,6 @@ class SnowSurface(MultiComponentSurface):
 
     Accurate background reflectances are assumed within the apply-oe pipeline of this branch. 
 
-    NOTE: disort keys hdrf and brdf is sloppy and should be changed soon to rho_dd and rho_hd.
-
-
     """
 
     def __init__(self, full_config: Config):
@@ -116,15 +113,15 @@ class SnowSurface(MultiComponentSurface):
             ds['lwc'].values,
         ]
 
-        self.g_hdrf = VectorInterpolator(
+        self.g_hd = VectorInterpolator(
             grid_input=grid,
-            data_input=ds['hdrf'].values,
+            data_input=ds['r_hd'].values,
             version="mlg"
         )
 
-        self.g_brdf = VectorInterpolator(
+        self.g_dd = VectorInterpolator(
             grid_input=grid,
-            data_input=ds['brdf'].values,
+            data_input=ds['r_dd'].values,
             version="mlg"
         )
 
@@ -213,10 +210,10 @@ class SnowSurface(MultiComponentSurface):
         
         # correct for RAA way DISORT is expecting it.
         disort_raa = 180 - raa
-        snow_dir_dir = self.g_brdf(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+        snow_dir_dir = self.g_dd(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
                                              disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
         
-        snow_dif_dir = self.g_hdrf(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+        snow_dif_dir = self.g_hd(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
                                              disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
 
         # Endmembers
