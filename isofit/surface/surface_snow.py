@@ -327,13 +327,13 @@ class SnowSurface(MultiComponentSurface):
         
         # Compute diffuse fraction
         L_total = (L_down_dif+L_down_dir)
-        k = L_down_dif / (L_down_dif + L_down_dir + 1e-8)
+        k = L_down_dif / (L_down_dif + L_down_dir + 1e-12)
         alb_blue = (1-k)*a_dir + k*a_dif
             
         # integrate
-        total_albedo = np.trapezoid(alb_blue * L_total, dx=1) / np.trapezoid(L_total + 1e-8, dx=1)
-        direct_albedo = np.trapezoid(a_dir * L_down_dir, dx=1) / np.trapezoid(L_down_dir + 1e-8, dx=1)
-        diffuse_albedo = np.trapezoid(a_dif * L_down_dif, dx=1) / np.trapezoid(L_down_dif + 1e-8, dx=1)
+        total_albedo = np.trapezoid(alb_blue * L_total, dx=1) / np.trapezoid(L_total + 1e-12, dx=1)
+        direct_albedo = np.trapezoid(a_dir * L_down_dir, dx=1) / np.trapezoid(L_down_dir + 1e-12, dx=1)
+        diffuse_albedo = np.trapezoid(a_dif * L_down_dif, dx=1) / np.trapezoid(L_down_dif + 1e-12, dx=1)
         
         return total_albedo, direct_albedo, diffuse_albedo
 
