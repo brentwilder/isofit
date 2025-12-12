@@ -3,7 +3,7 @@ import ray
 from scipy.ndimage import uniform_filter
 import os
 
-from isofit.inversion.inverse_simple import invert_algebraic
+from isofit.inversion.inverse_simple import invert_algebraic, invert_simple
 from isofit.core.fileio import IO
 from isofit.core.forward import ForwardModel
 
@@ -19,26 +19,39 @@ def bkg_heuristic_estimate(config):
     def invert_chunk(row_chunk, cols, config, fm):
         io = IO(config, fm) 
         n_bands = len(fm.surface.idx_lamb)
-        rfl_chunk = np.zeros((len(row_chunk), len(cols), n_bands))
+        rfl_chunk = np.zeros((len(row_chunk), len(cols), n_bands), dtype=np.float32)
+
+        # estimate on center of chunk
+        center_r = row_chunk[len(row_chunk)//2]
+        center_c = cols[len(cols)//2]
+        center_data = io.get_components_at_index(center_r, center_c, bkg_solve=True)
+
+        # Simple inversion at center
+        x_center = invert_simple(fm, center_data.meas, center_data.geom)
+        _, _, x_instr = fm.unpack(fm.init.copy())
+
+        # Iterate accross chunk
         for i, r in enumerate(row_chunk):
             for c in cols:
                 input_data = io.get_components_at_index(r, c, bkg_solve=True)
                 if input_data is None or input_data.meas is None:
                     rfl_chunk[i, c, :] = np.nan
                     continue
-                x_surface, x_RT, x_instrument = fm.unpack(fm.init.copy())
+
                 rfl_est, _, _ = invert_algebraic(
                     fm.surface,
                     fm.RT,
                     fm.instrument,
-                    x_surface,
-                    x_RT,
-                    x_instrument,
+                    x_center[fm.idx_surface],
+                    x_center[fm.idx_RT],
+                    x_instr,
                     input_data.meas,
                     input_data.geom
                 )
                 rfl_chunk[i, c, :] = rfl_est
-        return (row_chunk, rfl_chunk)
+
+        return row_chunk, rfl_chunk
+
 
     def calc_rho_e(cube, max_radius_km, pixel_size_m, radii_frac=None, weights=None, terrain=False):
         max_r_px = int(round(max_radius_km * 1000 / pixel_size_m))
