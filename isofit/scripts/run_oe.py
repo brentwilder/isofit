@@ -21,9 +21,9 @@ n_cores=42
 SENSOR="emit"
 
 # RDN, LOC, and OBS file paths for hyperspectral data
-rdn_file="/store/bawilder/melt-metrics/data/EMIT/inputs/20230216/emit20230216T211835_000"
-loc_file="/store/bawilder/melt-metrics/data/EMIT/inputs/20230216/emit20230216T211835_000_LOC"
-obs_file="/store/bawilder/melt-metrics/data/EMIT/inputs/20230216/emit20230216T211835_000_OBS"
+rdn_file="/store/bawilder/20251217_highmontainasia/emit20230423T064937/emit20230423T064937_rdn.img"
+loc_file="/store/bawilder/20251217_highmontainasia/emit20230423T064937/emit20230423T064937_loc.img"
+obs_file="/store/bawilder/20251217_highmontainasia/emit20230423T064937/emit20230423T064937_obs.img"
 
 # pixel size (for bkg term) [meters]
 PIXEL_SIZE=60
