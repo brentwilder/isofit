@@ -5,6 +5,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 from isofit.utils.apply_oe import apply_oe
 from isofit.utils.skyview import skyview
 from isofit.utils.shadow import run
+from isofit.core.common import find_header
 
 import xarray as xr
 from spectral import envi
@@ -12,7 +13,6 @@ import numpy as np
 
 #!/usr/bin/env bash
 
-# TODO: sky view and slope should be created prior to this.
 
 # Number of parallel cores
 n_cores=42
@@ -30,7 +30,7 @@ PIXEL_SIZE=60
 
 # Create wavelength file that reads from envi file and then set the path here
 wavelength_file = os.path.join(os.path.dirname(obs_file), "wave.txt")
-hdr_file = rdn_file + '.hdr'
+hdr_file = find_header(rdn_file)
 radiance_dataset = envi.open(hdr_file)
 wavelengths = np.array([float(w) for w in radiance_dataset.metadata["wavelength"]])
 fwhm = np.array([float(f) for f in radiance_dataset.metadata["fwhm"]])
@@ -88,4 +88,5 @@ apply_oe(rdn_file, loc_file, obs_file, OUTPUT_DIR, SENSOR,
          logging_level=LOGGING,
          inversion_windows=INVERSION_WINDOWS,
          n_cores=n_cores,
-         pixel_size=PIXEL_SIZE)
+         pixel_size=PIXEL_SIZE,
+         stars=False)

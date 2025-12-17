@@ -38,7 +38,6 @@ from isofit.configs import configs
 from isofit.core.fileio import IO
 from isofit.core.forward import ForwardModel
 from isofit.inversion import Inversion
-from isofit.utils.bkg_contributions import bkg_heuristic_estimate
 
 class Isofit:
     """Initialize the Isofit class.
@@ -109,10 +108,6 @@ class Isofit:
 
             If none of the above, the whole cube will be analyzed.
         """
-
-        logging.info("Running initial solve for rho_e and rho_terrain...")
-        bkg_heuristic_estimate(self.config)
-        logging.info("Background calculations complete.")
 
         logging.info("Building first forward model, will generate any necessary LUTs")
         self.fm = fm = ForwardModel(self.config)

@@ -30,6 +30,14 @@ class OutputConfig(BaseConfigSection):
     """
 
     def __init__(self, sub_configdic: dict = None):
+        self._snow_albedo_file_header = (
+            "statevector",
+            "{State Parameter, Value}",
+            "{}",
+        )
+        self._snow_albedo_file_type = str
+        self.snow_albedo_file = None
+
         self._estimated_state_file_header = (
             "statevector",
             "{State Parameter, Value}",

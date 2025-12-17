@@ -17,15 +17,11 @@ from spectral.io import envi
 
 import rasterio as rio
 
-
 import isofit.utils.template_construction as tmpl
 from isofit.core import isofit
 from isofit.core.common import envi_header
-from isofit.utils import analytical_line as ALAlg
-from isofit.utils import empirical_line as ELAlg
 from isofit.utils import extractions, interpolate_spectra, segment
-from isofit.utils import preconvolve_disort
-from isofit.utils import shadow
+from isofit.utils.bkg_contributions import bkg_heuristic_estimate
 
 EPS = 1e-6
 CHUNKSIZE = 256
@@ -744,6 +740,10 @@ def apply_oe(
             logging.info("`config_only` enabled, exiting early")
             return
 
+        logging.info("Running initial solve for rho_e and rho_terrain...")
+        bkg_heuristic_estimate(working_directory)
+        logging.info("Background calculations complete.")
+
         # Run retrieval
         logging.info("Running ISOFIT with full LUT")
         retrieval_full = isofit.Isofit(
@@ -766,40 +766,6 @@ def apply_oe(
             nneighbors = [int(round(3950 / 9 - 35 / 36 * segmentation_size))]
         else:
             nneighbors = [n for n in num_neighbors]
-
-        if empirical_line:
-            # Empirical line
-            logging.info("Empirical line inference")
-            ELAlg(
-                reference_radiance_file=paths.rdn_subs_path,
-                reference_reflectance_file=paths.rfl_subs_path,
-                reference_uncertainty_file=paths.uncert_subs_path,
-                reference_locations_file=paths.loc_subs_path,
-                segmentation_file=paths.lbl_working_path,
-                input_radiance_file=paths.radiance_working_path,
-                input_locations_file=paths.loc_working_path,
-                output_reflectance_file=paths.rfl_working_path,
-                output_uncertainty_file=paths.uncert_working_path,
-                isofit_config=paths.isofit_full_config_path,
-                nneighbors=nneighbors[0],
-                n_cores=n_cores,
-            )
-        elif analytical_line:
-            logging.info("Analytical line inference")
-            ALAlg(
-                paths.radiance_working_path,
-                paths.loc_working_path,
-                paths.obs_working_path,
-                working_directory,
-                output_rfl_file=paths.rfl_working_path,
-                output_unc_file=paths.uncert_working_path,
-                loglevel=logging_level,
-                logfile=log_file,
-                n_atm_neighbors=nneighbors,
-                n_cores=n_cores,
-                smoothing_sigma=atm_sigma,
-            )
-
 
 
 

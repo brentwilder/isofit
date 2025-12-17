@@ -372,13 +372,8 @@ class Inversion:
             # Calculate the initial solution, if needed.
             x0 = invert_simple(self.fm, meas, geom)
 
-            # BW NOTE: removed this line
-            # Update regions outside retrieval windows to match priors
-            #if self.config.priors_in_initial_guess:
-            #    prior_subset_idx = np.arange(len(x0))[self.fm.idx_surf_rfl][
-            #        self.outside_ret_windows
-            #    ]
-            #    x0[prior_subset_idx] = self.fm.surface.xa(x0, geom)[prior_subset_idx]
+            # define total jac first prior, because not all pixels are inverted (NDSI)
+            geom.total_jac = np.zeros((len(self.winidx), len(x0)))
 
             # Do not invert if not enough snow is present in pixel.
             if geom.ndsi < 0.1:
@@ -438,9 +433,6 @@ class Inversion:
 
                 return np.real(residual)
 
-            # Initialize and invert
-            # NOTE: had to add this here because some optimizations fail
-            geom.total_jac = np.zeros((len(self.winidx), len(x0)))
             try:
                 #import time
                 #start = time.time()

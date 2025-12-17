@@ -2,12 +2,14 @@ import numpy as np
 import ray
 from scipy.ndimage import uniform_filter
 import os
+from glob import glob
 
 from isofit.inversion.inverse_simple import invert_algebraic, invert_simple
 from isofit.core.fileio import IO
 from isofit.core.forward import ForwardModel
+from isofit.configs import configs
 
-def bkg_heuristic_estimate(config):
+def bkg_heuristic_estimate(working_directory):
     """NOTE: assumes NaN to be 0.25 background"""
 
     # weights based on example in Richter 1998, `Correction of satellite imagery over mountainous terrain`
@@ -86,6 +88,9 @@ def bkg_heuristic_estimate(config):
             weighted_avg += weights[i] * annulus_avg
 
         return np.nan_to_num(weighted_avg, nan=0.25)
+    
+
+    config = configs.create_new_config(glob(os.path.join(working_directory, "config", "") + "*_isofit.json")[0])
 
     
     fm = ForwardModel(config)
@@ -128,5 +133,6 @@ def bkg_heuristic_estimate(config):
         np.save(rho_terrain_path, rho_terrain.astype(np.float16))
 
     del io
+    del fm
 
     return

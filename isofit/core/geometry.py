@@ -57,6 +57,11 @@ class Geometry:
         self.earth_sun_distance = None
         self.esd_factor = 1.
 
+        # set for initial write?
+        self.a_total = 0.0
+        self.a_direct = 0.0
+        self.a_diffuse = 0.0
+
         if esd is None:
             logging.warning(
                 "Earth sun distance not provided. Proceeding without might cause some inaccuracies down the line"
@@ -101,7 +106,8 @@ class Geometry:
             self.observer_zenith = obs[2]  # 0 to 90 from zenith
             self.solar_azimuth = obs[3]  # 0 to 360 clockwise from N
             self.solar_zenith = obs[4]  # 0 to 90 from zenith
-            #self.slope = obs[6] # slope in degrees
+            if np.isnan(self.slope): # slope data not given, take from loc file
+                self.slope = obs[6] # slope in degrees
             self.aspect = obs[7] # aspect in degrees
             self.cos_i = obs[8]  # cosine of eSZA
             # calculate relative to-sun azimuth

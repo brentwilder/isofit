@@ -424,9 +424,12 @@ class IO:
                 n_bands += 1 # BW NOTE, adding one for mean abs percent error
                 band_names.append('MAPE')
             
-            if element_name == "estimated_state_file":
-                n_bands += 3 # addeding in 3 albedo outputs
-                band_names.append("Total_Albedo", "Direct_Albedo", "Diffuse_Albedo")
+            if element_name == "snow_albedo_file":
+                n_bands = 3 # addeding in 3 albedo outputs
+                band_names = []
+                band_names.append("Total_Albedo")
+                band_names.append("Direct_Albedo")
+                band_names.append("Diffuse_Albedo")
 
             self.output_datasets[element_name] = SpectrumFile(
                 element,
@@ -453,10 +456,7 @@ class IO:
         # Load the earth sun distance data
         self.esd = self.load_esd()
 
-        # Load the Slope data
-        loc_path = str(self.config.input.loc_file)
-        slope_path = str(os.path.join(os.path.dirname(loc_path), "slope.tif"))
-        self.slope = rio.open(slope_path).read(1).astype(float) 
+
 
         # Capping polynomial to not allow negative, or increasing trend, at very high ground altitudes (>6km).
         min_value = 0.25
@@ -535,8 +535,18 @@ class IO:
         self.adjust_aot_lower_bound = aot_poly["ATM_MIDLAT_WINTER"]
         self.adjust_h2o_upper_bound = h2o_poly["ATM_MIDLAT_WINTER"]
 
+
+        loc_path = str(self.config.input.loc_file)
+
         # load the svf data
-        self.svf = rio.open(str(os.path.join(os.path.dirname(loc_path), "svf.tif"))).read(1).astype(float)
+        self.svf = rio.open(str(os.path.join(os.path.dirname(loc_path), "sky_view_factor"))).read(1).astype(float)
+
+        # Load the Slope data if there
+        slope_path = str(os.path.join(os.path.dirname(loc_path), "slope.tif"))
+        try:
+            self.slope = rio.open(slope_path).read(1).astype(float) 
+        except:
+            self.slope = np.full_like(self.svf, fill_value=np.nan)
 
         # NOTE: in my implementation of shadow here, its ray tracing and 1 is sun and 0 is shadow.
         # flipped so i can just easily multiply by mu_s every time.
@@ -738,6 +748,7 @@ class IO:
                 "radiometry_correction_file": data_bad,
                 "spectral_calibration_file": data_bad,
                 "posterior_uncertainty_file": state_bad_unc,
+                "snow_albedo_file": np.array([-9999.0,-9999.0,-9999.0])
             }
 
         else:
@@ -754,9 +765,10 @@ class IO:
 
             ############ Start with all of the 'independent' calculations
             if "estimated_state_file" in self.output_datasets:
-                albedos = np.array([geom.a_total, geom.a_direct, geom.a_diffuse])
-                state_est = np.append(state_est, np.array(albedos))
                 to_write["estimated_state_file"] = state_est
+
+            # always run albedo
+            to_write["snow_albedo_file"] = np.array([geom.a_total, geom.a_direct, geom.a_diffuse])
 
             if "path_radiance_file" in self.output_datasets:
                 # Note: for glint models, this will return atm + glint
@@ -966,3 +978,27 @@ def write_bil_chunk(
     outfile.seek(line * shape[1] * shape[2] * np.dtype(dtype).itemsize)
     outfile.write(dat.astype(dtype).tobytes())
     outfile.close()
+
+
+def initialize_output(output_metadata, outpath, out_shape, **kwargs):
+    """
+    Initialize output file by updating metadata and creating object.
+
+    Args:
+        output_metadata: dict - Dictionary with envi header information
+        outpath: str - path to output file
+        out_shape: tuple - dimensions of initialized file
+        keys_to_del: list - keys to remove from output_metadata
+        kwargs - key-argument pairs to add to output_metadata
+    """
+    for key, value in kwargs.items():
+        output_metadata[key] = value
+
+    out_file = envi.create_image(
+        envi_header(outpath), ext="", metadata=output_metadata, force=True
+    )
+    out_mm = out_file.open_memmap(interleave="source", writable=True)
+    out_mm[:, :] = np.zeros(out_shape, dtype=np.float32)
+    del out_file
+
+    return outpath

@@ -1,6 +1,6 @@
 {
-    "output_model_file": "/Users/bawilder/Code/isofit-snow/emit/surface_model.mat",
-    "wavelength_file": "/Users/bawilder/Code/isofit-snow/emit/emit-wave.txt",
+    "output_model_file": "/home/bawilder/store/20250626_emit_sierras/surface/surface_model.mat",
+    "wavelength_file": "/home/bawilder/store/20250626_emit_sierras/pipeline/emit-wave.txt",
     "normalize":"Euclidean",
     "reference_windows":[[400,1300],[1450,1700],[2100,2450]],
     "sources":
@@ -8,7 +8,7 @@
     {
       "input_spectrum_files":
         [
-          "/Users/bawilder/.isofit/data/reflectance/surface_model_ucsb"
+          "/home/bawilder/.isofit/data/reflectance/surface_model_ucsb"
         ],
       "n_components": 8,
       "windows": [
@@ -42,7 +42,7 @@
     {
       "input_spectrum_files":
         [
-          "/Users/bawilder/.isofit/data/reflectance/ocean_spectra_rev2"
+          "/home/bawilder/.isofit/data/reflectance/ocean_spectra_rev2"
         ],
       "n_components": 4,
       "windows": [

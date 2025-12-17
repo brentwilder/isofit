@@ -113,16 +113,14 @@ class SnowSurface(MultiComponentSurface):
         ]
 
         # load DISORT data to Jouni's interp class.. two rfls and two albedos...
-        try:
-            self.g_hd = VectorInterpolator(grid_input=grid,data_input=ds['r_hd'].values,version="mlg")
-            self.g_dd = VectorInterpolator(grid_input=grid,data_input=ds['r_dd'].values,version="mlg")
-            self.g_ah = VectorInterpolator(grid_input=grid,data_input=ds['a_hd'].values,version="mlg")
-            self.g_ad = VectorInterpolator(grid_input=grid,data_input=ds['a_dd'].values,version="mlg")
+        #self.g_hd = VectorInterpolator(grid_input=grid,data_input=ds['r_hd'].values,version="mlg")
+        #self.g_dd = VectorInterpolator(grid_input=grid,data_input=ds['r_dd'].values,version="mlg")
+        #self.g_ah = VectorInterpolator(grid_input=grid,data_input=ds['a_hd'].values,version="mlg")
+        #self.g_ad = VectorInterpolator(grid_input=grid,data_input=ds['a_dd'].values,version="mlg")
         # just to work with older iteration of my DISORT LUT, to be removed soon...
-        except:
-            self.g_hd = VectorInterpolator(grid_input=grid,data_input=ds['hdrf'].values,version="mlg")
-            self.g_dd = VectorInterpolator(grid_input=grid,data_input=ds['brdf'].values,version="mlg")
-            self.g_alb = VectorInterpolator(grid_input=grid,data_input=ds['a_diffuse'].values,version="mlg")
+        self.g_hd = VectorInterpolator(grid_input=grid,data_input=ds['hdrf'].values,version="mlg")
+        self.g_dd = VectorInterpolator(grid_input=grid,data_input=ds['brdf'].values,version="mlg")
+        self.g_alb = VectorInterpolator(grid_input=grid,data_input=ds['a_diff'].values,version="mlg")
 
         # Load in Endmembers data
         with open(env.path("data", f"pv_{disort_sensor}.pkl"), 'rb') as f:
@@ -326,15 +324,16 @@ class SnowSurface(MultiComponentSurface):
         # correct for RAA way DISORT is expecting it.
         disort_raa = 180 - raa
 
+        # TODO
         # temp try/except to work for both versions of the DISORT LUT, to be removed soon..
-        try:
-            a_dir = self.g_ad(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
-                                                disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
-            
-            a_dif = self.g_ah(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
-                                                disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
-        except:
-            a_dir = a_dif = self.g_alb(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+        #a_dir = self.g_ad(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+        #                                    disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
+        
+        #a_dif = self.g_ah(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+        #                                    disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
+
+        # This is tmp until fully go to next DISORT version
+        a_dir = a_dif = self.g_alb(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
                                                 disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
 
         # Compute diffuse fraction
@@ -342,10 +341,10 @@ class SnowSurface(MultiComponentSurface):
         k = L_down_dif / (L_down_dif + L_down_dir + 1e-12)
         alb_blue = (1-k)*a_dir + k*a_dif
             
-        # integrate
-        total_albedo = np.trapezoid(alb_blue * L_total, dx=1) / np.trapezoid(L_total + 1e-12, dx=1)
-        direct_albedo = np.trapezoid(a_dir * L_down_dir, dx=1) / np.trapezoid(L_down_dir + 1e-12, dx=1)
-        diffuse_albedo = np.trapezoid(a_dif * L_down_dif, dx=1) / np.trapezoid(L_down_dif + 1e-12, dx=1)
+        # integrate (numpy changed trapz it seems in 2.0?)
+        total_albedo = np.trapz(alb_blue * L_total, dx=1) / np.trapz(L_total + 1e-12, dx=1)
+        direct_albedo = np.trapz(a_dir * L_down_dir, dx=1) / np.trapz(L_down_dir + 1e-12, dx=1)
+        diffuse_albedo = np.trapz(a_dif * L_down_dif, dx=1) / np.trapz(L_down_dif + 1e-12, dx=1)
         
         return total_albedo, direct_albedo, diffuse_albedo
 

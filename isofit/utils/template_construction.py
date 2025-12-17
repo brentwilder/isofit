@@ -116,6 +116,10 @@ class Pathnames:
         self.state_working_path = abspath(
             join(self.output_directory, rdn_fname.replace("_rdn", "_state"))
         )
+        self.snowalbedo_working_path = abspath(
+            join(self.output_directory, rdn_fname.replace("_rdn", "_snow_albedo"))
+        )
+    
         self.surface_working_path = abspath(join(self.data_directory, "surface.mat"))
 
         if copy_input_files is True:
@@ -986,7 +990,8 @@ def build_main_config(
         ] = paths.radiance_working_path
         isofit_config_modtran["input"]["loc_file"] = paths.loc_working_path
         isofit_config_modtran["input"]["obs_file"] = paths.obs_working_path
-        #isofit_config_modtran["input"]["svf_file"] = paths.svf_working_path
+
+        isofit_config_modtran["output"]["snow_albedo_file"] = paths.snowalbedo_working_path
 
         isofit_config_modtran["output"]["posterior_uncertainty_file"] = paths.uncert_working_path
 
