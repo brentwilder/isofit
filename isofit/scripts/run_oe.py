@@ -43,18 +43,18 @@ ATMOS="ATM_MIDLAT_WINTER"
 #ATMOS="ATM_SUBARC_SUMMER"
 
 # Path to surface config
-SURFACE_CONFIG_DIR="/home/bawilder/store/20250626_emit_sierras/surface/multicomponent_surface.json"
+SURFACE_CONFIG_DIR="/store/bawilder/isofit/recipe/bw/multicomponent_surface.json"
 
 # SNOW SURFACE
 SURFACE="snow_surface"
 
 # Output directory. Will be created if it doesn't exist.
-OUTPUT_DIR="/store/bawilder/melt-metrics/data/EMIT/state/20230216"
+OUTPUT_DIR="/store/bawilder/20251217_highmontainasia/emit20230423T064937"
 
 # MODTRAN
-PREBUILT_LUT="/store/bawilder/20250319_modtran_test/modtran_luts/EMIT_Sierras/emit_20230216T211835.nc"
+PREBUILT_LUT="/store/bawilder/20250319_modtran_test/modtran_luts/HighMountainAsiaEMIT/emit_20230423.nc"
 
-LUT_CONFIG="/store/bawilder/melt-metrics/isofit/scripts/config-isofit-lut.json"
+LUT_CONFIG="/store/bawilder/isofit/isofit/scripts/config-isofit-lut.json"
 
 # LOGGING
 LOGGING="INFO"
