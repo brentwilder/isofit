@@ -3,6 +3,9 @@ os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
 from isofit.utils.apply_oe import apply_oe
+from isofit.utils.skyview import skyview
+from isofit.utils.shadow import run
+
 import xarray as xr
 from spectral import envi
 import numpy as np
@@ -58,6 +61,22 @@ LOGGING="INFO"
 
 # SET INVERSION WINDOWS
 INVERSION_WINDOWS = [[380.0, 1325.0], [1435, 1770.0], [1965.0, 2500.0]]
+
+
+# Run skyview and shadow
+skyview(input=loc_file,
+        output_directory=os.path.dirname(loc_file),
+        resolution=PIXEL_SIZE,
+        obs_or_loc="loc",
+        method="horizon",
+        n_cores=n_cores,
+        n_angles=72,
+        )
+
+run(input_loc=loc_file,
+    input_obs=obs_file,
+    pix_size=PIXEL_SIZE,
+    n_cpus=n_cores)
 
 apply_oe(rdn_file, loc_file, obs_file, OUTPUT_DIR, SENSOR,
          surface_path= SURFACE_CONFIG_DIR,

@@ -106,12 +106,12 @@ def run(input_loc, input_obs, pix_size, n_cpus ):
     return 
 
 
-if __name__ == "__main__":
-    input_loc = '/Users/bawilder/Documents/ARCSIX/ANG/ang20240815t160909_008_L1B_RDN_cc451d4a_RDN/ang20240815t160909_008_L1B_ORT_7b1b5d77_LOC'
-    input_obs = '/Users/bawilder/Documents/ARCSIX/ANG/ang20240815t160909_008_L1B_RDN_cc451d4a_RDN/ang20240815t160909_008_L1B_ORT_7b1b5d77_OBS'
-    pix_size = 6.6
-    n_cpus = 12
-    run(input_loc=input_loc,
-        input_obs=input_obs,
-        pix_size=pix_size,
-        n_cpus=n_cpus)
+#if __name__ == "__main__":
+#    input_loc = '/Users/bawilder/Documents/ARCSIX/ANG/ang20240815t160909_008_L1B_RDN_cc451d4a_RDN/ang20240815t160909_008_L1B_ORT_7b1b5d77_LOC'
+#    input_obs = '/Users/bawilder/Documents/ARCSIX/ANG/ang20240815t160909_008_L1B_RDN_cc451d4a_RDN/ang20240815t160909_008_L1B_ORT_7b1b5d77_OBS'
+#    pix_size = 6.6
+#    n_cpus = 12
+#    run(input_loc=input_loc,
+#        input_obs=input_obs,
+#        pix_size=pix_size,
+#        n_cpus=n_cpus)
