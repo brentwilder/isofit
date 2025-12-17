@@ -113,10 +113,16 @@ class SnowSurface(MultiComponentSurface):
         ]
 
         # load DISORT data to Jouni's interp class.. two rfls and two albedos...
-        self.g_hd = VectorInterpolator(grid_input=grid,data_input=ds['r_hd'].values,version="mlg")
-        self.g_dd = VectorInterpolator(grid_input=grid,data_input=ds['r_dd'].values,version="mlg")
-        self.g_ah = VectorInterpolator(grid_input=grid,data_input=ds['a_hd'].values,version="mlg")
-        self.g_ad = VectorInterpolator(grid_input=grid,data_input=ds['a_dd'].values,version="mlg")
+        try:
+            self.g_hd = VectorInterpolator(grid_input=grid,data_input=ds['r_hd'].values,version="mlg")
+            self.g_dd = VectorInterpolator(grid_input=grid,data_input=ds['r_dd'].values,version="mlg")
+            self.g_ah = VectorInterpolator(grid_input=grid,data_input=ds['a_hd'].values,version="mlg")
+            self.g_ad = VectorInterpolator(grid_input=grid,data_input=ds['a_dd'].values,version="mlg")
+        # just to work with older iteration of my DISORT LUT, to be removed soon...
+        except:
+            self.g_hd = VectorInterpolator(grid_input=grid,data_input=ds['hdrf'].values,version="mlg")
+            self.g_dd = VectorInterpolator(grid_input=grid,data_input=ds['brdf'].values,version="mlg")
+            self.g_alb = VectorInterpolator(grid_input=grid,data_input=ds['a_diffuse'].values,version="mlg")
 
         # Load in Endmembers data
         with open(env.path("data", f"pv_{disort_sensor}.pkl"), 'rb') as f:
@@ -319,12 +325,18 @@ class SnowSurface(MultiComponentSurface):
         
         # correct for RAA way DISORT is expecting it.
         disort_raa = 180 - raa
-        a_dir = self.g_ad(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
-                                             disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
-        
-        a_dif = self.g_ah(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
-                                             disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
-        
+
+        # temp try/except to work for both versions of the DISORT LUT, to be removed soon..
+        try:
+            a_dir = self.g_ad(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+                                                disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
+            
+            a_dif = self.g_ah(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+                                                disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
+        except:
+            a_dir = a_dif = self.g_alb(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+                                                disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
+
         # Compute diffuse fraction
         L_total = (L_down_dif+L_down_dir)
         k = L_down_dif / (L_down_dif + L_down_dir + 1e-12)
