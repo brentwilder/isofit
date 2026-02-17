@@ -228,7 +228,7 @@ def apply_oe(
     """
     use_superpixels = empirical_line or analytical_line
 
-    use_superpixels = False # hard set, does not make sense for snow surface
+    use_superpixels = False  # hard set, does not make sense for snow surface
 
     # NOTE: if sky view and shadow maps are not in the LOC directory than they are assumed to be 1.0
 
@@ -308,7 +308,6 @@ def apply_oe(
                     f" match input_radiance size: {rdn_size}"
                 )
                 raise ValueError(err_str)
-            
 
     lut_params = tmpl.LUTConfig(lut_config_file, emulator_base, no_min_lut_spacing)
 
@@ -767,23 +766,41 @@ def apply_oe(
         else:
             nneighbors = [n for n in num_neighbors]
 
-
-
     # BW
     # before closing, store tif needed for STARS data fusion.
     # entire state vector (from surface file)
+    stars = False
     if stars == True:
 
         state_file = paths.state_working_path
         shadow_file = os.path.join(os.path.dirname(input_obs), "shadow.npy")
         output_dir = paths.output_directory
-        
+
         statevec_names = [
-            'sinA','cosA','Grain_radius', 'Liquid_water', 'Dust', 'Algae', 
-            'z_snow', 'z_pv', 'z_npv', 'z_soil','veg_rank','npv_rank', 'soil_rank',
-            'fbar_snow','fbar2_snow'
+            "sinA",
+            "cosA",
+            "Grain_radius",
+            "Liquid_water",
+            "Dust",
+            "Algae",
+            "z_snow",
+            "z_pv",
+            "z_npv",
+            "z_soil",
+            "veg_rank",
+            "npv_rank",
+            "soil_rank",
+            "fbar_snow",
+            "fbar2_snow",
         ]
-        band_names = ['FSCA', 'Grain_Radius', 'Dust_Concentration', 'F_Snow', 'F_Shade', 'F_Canopy']
+        band_names = [
+            "FSCA",
+            "Grain_Radius",
+            "Dust_Concentration",
+            "F_Snow",
+            "F_Shade",
+            "F_Canopy",
+        ]
 
         # Load state data
         with rio.open(state_file) as src:
@@ -793,12 +810,16 @@ def apply_oe(
         idx = {name: i for i, name in enumerate(statevec_names)}
 
         # Compute f_snow
-        z_stack = np.exp(np.stack([
-            state_data[idx['z_snow']],
-            state_data[idx['z_pv']],
-            state_data[idx['z_npv']],
-            state_data[idx['z_soil']]
-        ]))
+        z_stack = np.exp(
+            np.stack(
+                [
+                    state_data[idx["z_snow"]],
+                    state_data[idx["z_pv"]],
+                    state_data[idx["z_npv"]],
+                    state_data[idx["z_soil"]],
+                ]
+            )
+        )
         f_snow = (z_stack / z_stack.sum(axis=0))[0]
 
         # Load shadow
@@ -811,34 +832,38 @@ def apply_oe(
             slope = obs_src.read(7)
 
         # Aspect from sinA / cosA
-        sin_aspect = state_data[idx['sinA']]
-        cos_aspect = state_data[idx['cosA']]
+        sin_aspect = state_data[idx["sinA"]]
+        cos_aspect = state_data[idx["cosA"]]
         aspect = np.arctan2(sin_aspect, cos_aspect)
         aspect = np.where(aspect < 0, aspect + 2 * np.pi, aspect)
 
-        cos_i = (np.sin(np.radians(sza)) * np.sin(np.radians(slope)) *
-                    np.cos(np.radians(saa) - aspect) +
-                    np.cos(np.radians(sza)) * np.cos(np.radians(slope)))
+        cos_i = np.sin(np.radians(sza)) * np.sin(np.radians(slope)) * np.cos(
+            np.radians(saa) - aspect
+        ) + np.cos(np.radians(sza)) * np.cos(np.radians(slope))
         cos_i = np.clip(cos_i, 0, None) * shadow
 
         mask = (cos_i > 0.06) & (f_snow >= 0.75)
         filler = np.zeros_like(f_snow, dtype=np.float32)
 
-        results_out = np.stack([
-            filler,
-            state_data[idx['Grain_radius']],
-            state_data[idx['Dust']],
-            f_snow,
-            filler,
-            filler
-        ]).astype(np.float32)
+        results_out = np.stack(
+            [
+                filler,
+                state_data[idx["Grain_radius"]],
+                state_data[idx["Dust"]],
+                f_snow,
+                filler,
+                filler,
+            ]
+        ).astype(np.float32)
 
         results_out = np.where(mask, results_out, np.nan).astype(np.float32)
 
         # Save
-        meta.update({'count': results_out.shape[0], 'dtype': 'float32', 'driver': 'GTiff'})
-        out_path = os.path.join(output_dir, os.path.basename(state_file) + '.tif')
-        with rio.open(out_path, 'w', **meta) as dst:
+        meta.update(
+            {"count": results_out.shape[0], "dtype": "float32", "driver": "GTiff"}
+        )
+        out_path = os.path.join(output_dir, os.path.basename(state_file) + ".tif")
+        with rio.open(out_path, "w", **meta) as dst:
             for b, name in enumerate(band_names, 1):
                 dst.write(results_out[b - 1], b)
                 dst.set_band_description(b, name)
@@ -884,6 +909,7 @@ def apply_oe(
 @click.option("--config_only", is_flag=True, default=False)
 @click.option("--interpolate_bad_rdn", is_flag=True, default=False)
 @click.option("--interpolate_inplace", is_flag=True, default=False)
+@click.option("--pixel_size", type=float, default=60)
 @click.option(
     "--debug-args",
     help="Prints the arguments list without executing the command",

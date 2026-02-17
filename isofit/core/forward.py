@@ -285,7 +285,7 @@ class ForwardModel:
             L_dir_dif,
             L_dif_dif,
             L_slope_down,
-        ) = self.RT.calc_RT_quantities(x_RT,x_surface, geom)
+        ) = self.RT.calc_RT_quantities(x_RT, x_surface, geom)
 
         # Get Surface quantities - handles upsampling
         rho_dir_dir, rho_dif_dir, Ls = self.upsample_surface_vectors_to_RT(
@@ -335,10 +335,11 @@ class ForwardModel:
             L_dir_dif,
             L_dif_dif,
             L_slope_down,
-        ) = self.RT.calc_RT_quantities(x_RT,x_surface, geom)
+        ) = self.RT.calc_RT_quantities(x_RT, x_surface, geom)
 
-        
-        return self.surface.calc_snow_albedo(x[self.idx_surface], geom, L_down_dir, L_down_dif)
+        return self.surface.calc_snow_albedo(
+            x[self.idx_surface], geom, L_down_dir, L_down_dif
+        )
 
     def calc_lamb(self, x, geom):
         """Calculate the Lambertian surface reflectance."""
@@ -356,10 +357,10 @@ class ForwardModel:
             Gamma = self.model_discrepancy
         else:
             pass
-        
+
         # BW: instead of a true gamma, this is to help stability of Seps for inversion of Shat
         # Found to work well by adding small value to diaganol.
-        Gamma = np.diag((1e-6 * np.ones(len(meas)))**2)
+        Gamma = np.diag((1e-6 * np.ones(len(meas))) ** 2)
 
         Kb = self.Kb(x, geom)
         Sy = self.instrument.Sy(meas, geom)
@@ -432,8 +433,6 @@ class ForwardModel:
             Ls=Ls,
             rdn=rdn,
         )
-
-
 
         # To get derivatives w.r.t. instrument, downsample to instrument wavelengths
         dmeas_dsurface = self.instrument.sample(

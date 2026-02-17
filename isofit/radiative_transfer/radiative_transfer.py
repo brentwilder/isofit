@@ -124,7 +124,7 @@ class RadiativeTransfer:
             self.init.append(sv.init)
             self.prior_sigma.append(sv.prior_sigma)
             self.prior_mean.append(sv.prior_mean)
-        
+
         self.bounds = np.array(self.bounds)
         self.scale = np.array(self.scale)
         self.init = np.array(self.init)
@@ -189,21 +189,21 @@ class RadiativeTransfer:
         # Adjacency effects and background contributions
         if geom.rho_e is not None:
             rho_dif_dif = geom.rho_e
-            rho_dir_dif = geom.rho_e 
+            rho_dir_dif = geom.rho_e
             rho_terrain = geom.rho_terrain
         else:
-            rho_dif_dif = rho_dif_dir 
+            rho_dif_dif = rho_dif_dir
             rho_dir_dif = rho_dif_dir
             rho_terrain = rho_dif_dir
 
         # testing with equal to target pixel
-        #rho_dif_dif = rho_dif_dir #NOTE testing only 
-        #rho_dir_dif = rho_dif_dir #NOTE testing only
-        #rho_terrain = rho_dif_dir
+        # rho_dif_dif = rho_dif_dir #NOTE testing only
+        # rho_dir_dif = rho_dif_dir #NOTE testing only
+        # rho_terrain = rho_dif_dir
 
-        #import matplotlib.pyplot as plt
-        #plt.scatter(self.wl, self.bkg_rfl)
-        #plt.show()
+        # import matplotlib.pyplot as plt
+        # plt.scatter(self.wl, self.bkg_rfl)
+        # plt.show()
 
         # Atmospheric path radiance
         L_atm = self.get_L_atm(x_RT, geom)
@@ -220,8 +220,8 @@ class RadiativeTransfer:
             atm_surface_scattering = 1
 
         # Compute L_Slope (viewshed radiance). approx that L_tot is reasonable estimate for neighborhood.
-        ct = max(0,((1 + np.cos(np.radians(geom.slope))) / 2 ) - geom.svf)
-        L_slope = (L_slope_down * ct * rho_terrain)
+        ct = max(0, ((1 + np.cos(np.radians(geom.slope))) / 2) - geom.svf)
+        L_slope = L_slope_down * ct * rho_terrain
 
         # Thermal transmittance
         L_up = Ls * (r["transm_up_dir"] + r["transm_up_dif"])
@@ -256,7 +256,6 @@ class RadiativeTransfer:
         # L_atm + (L_tot * rho_dir_dir) / (1 - S * rho_dir_dir) + L_up,
         # with L_tot being the total radiance (downward * upward, direct + diffuse).
 
-
         # TOA radiance model
         # NOTE: this energy returned at sensor...
         ret = (
@@ -265,7 +264,7 @@ class RadiativeTransfer:
             + L_dif_dir * rho_dif_dir
             + L_dir_dif * rho_dir_dif
             + L_dif_dif * rho_dif_dif
-            + L_slope * rho_dif_dir 
+            + L_slope * rho_dif_dir
             + (L_tot * atm_surface_scattering * rho_dif_dif) / (1 - s_alb * rho_dif_dif)
             + L_up
         )
@@ -364,7 +363,7 @@ class RadiativeTransfer:
                     # Transform downward transmittance to radiance
                     L_down_dir = self.rho_to_rdn(r["transm_down_dir"], coszen)
                     L_down_dif = self.rho_to_rdn(r["transm_down_dif"], coszen)
-                
+
                 L_down_dif = L_down_dif
                 L_down = L_down_dir + L_down_dif
 
@@ -374,7 +373,7 @@ class RadiativeTransfer:
 
         return np.hstack(L_downs), np.hstack(L_downs_dir), np.hstack(L_downs_dif)
 
-    def get_L_coupled(self, r: dict, x_surface:np.ndarray, geom: Geometry):
+    def get_L_coupled(self, r: dict, x_surface: np.ndarray, geom: Geometry):
         """Get the interpolated radiance terms on the sun-to-surface-to-sensor path.
         These follow the physics as presented in Guanter (2006), Vermote et al. (1997), and Tanre et al. (1983).
 
@@ -416,35 +415,39 @@ class RadiativeTransfer:
                     if self.rt_engines[0].rt_mode == "transm"
                     else r[key]
                 )
-        if len(x_surface) >10: # this is is SnowSurface 
+        if len(x_surface) > 10:  # this is is SnowSurface
             # NOTE: BW HERE
             # update cos_i based on x_surface
             # solve for aspect via sin(aspect) and cos(aspect)
             aspect = np.degrees(math.atan2(x_surface[0], x_surface[1]))
-            if (aspect < 0.0):
+            if aspect < 0.0:
                 aspect += 360.0
             aspect = np.radians(aspect)
-            cos_i = (np.sin(np.radians(geom.solar_zenith)) * np.sin(np.radians(geom.slope)) *
-                    np.cos(np.radians(geom.solar_azimuth) - aspect) +
-                    np.cos(np.radians(geom.solar_zenith)) * np.cos(np.radians(geom.slope)))
-        else: # is IceSurface class
+            cos_i = np.sin(np.radians(geom.solar_zenith)) * np.sin(
+                np.radians(geom.slope)
+            ) * np.cos(np.radians(geom.solar_azimuth) - aspect) + np.cos(
+                np.radians(geom.solar_zenith)
+            ) * np.cos(
+                np.radians(geom.slope)
+            )
+        else:  # is IceSurface class
             cos_i = x_surface[0]
 
-        cos_i = max(0., min(cos_i, 1.0)) 
+        cos_i = max(0.0, min(cos_i, 1.0))
 
-        #import matplotlib.pyplot as plt
-        #plt.scatter(self.wl, self.bkg_dh, color='blue')
-        #plt.scatter(self.wl, self.bkg_hh, color='red')
-        #plt.show()
-        
+        # import matplotlib.pyplot as plt
+        # plt.scatter(self.wl, self.bkg_dh, color='blue')
+        # plt.scatter(self.wl, self.bkg_hh, color='red')
+        # plt.show()
+
         # update cosi based on ray-tracing nearby terrain.
         # zero is shadow , one is illuminated data
         cos_i = cos_i * geom.shadow
-        
+
         # cosi_bkg, for now this is mu0
         # I think it is the safest assumption because this removes the dependence of optimal terrain
         # Another way is we could use aggregated terrain data over similar length scales for rho_e and rho_terrain.
-        cosi_bkg = coszen 
+        cosi_bkg = coszen
 
         # NOTE: technically there is also some interaction i thnk of SVF for dif-dif.
         # But we are assuming the svf of bkg ~ 1.0, and so it should just be the svf of the target pixel contributing.
@@ -457,9 +460,9 @@ class RadiativeTransfer:
 
         return L_dir_dir, L_dif_dir, L_dir_dif, L_dif_dif
 
-
-
-    def calc_RT_quantities(self, x_RT: np.ndarray, x_surface: np.ndarray, geom: Geometry):
+    def calc_RT_quantities(
+        self, x_RT: np.ndarray, x_surface: np.ndarray, geom: Geometry
+    ):
         """Retrieves the RT quantities including the LUT sample (r),
         and the radiances (L). This function handles the hand-off between
         the 1c and 4c model.
@@ -476,7 +479,9 @@ class RadiativeTransfer:
         coszen, cos_i = geom.check_coszen_and_cos_i(self.coszen)
 
         # Default: get directional radiances
-        L_dir_dir, L_dif_dir, L_dir_dif, L_dif_dif = self.get_L_coupled(r, x_surface, geom)
+        L_dir_dir, L_dif_dir, L_dir_dif, L_dif_dif = self.get_L_coupled(
+            r, x_surface, geom
+        )
         L_tot = L_dir_dir + L_dif_dir + L_dir_dif + L_dif_dif
 
         # Handle case for 1c vs 4c model
@@ -485,26 +490,31 @@ class RadiativeTransfer:
             L_tot, L_down_dir, L_down_dif = self.get_L_down_transmitted(x_RT, geom)
         else:
             # 4c model w/in else clause
-            #L_down_dir = L_dir_dir + L_dif_dir
-            #L_down_dif = L_dif_dir + L_dif_dir
-            L_slope_down, L_down_dir, L_down_dif = self.get_L_down_transmitted(x_RT, geom)
+            # L_down_dir = L_dir_dir + L_dif_dir
+            # L_down_dif = L_dif_dir + L_dif_dir
+            L_slope_down, L_down_dir, L_down_dif = self.get_L_down_transmitted(
+                x_RT, geom
+            )
             # correct downward for surface
-            if len(x_surface) >10: # this is is SnowSurface 
+            if len(x_surface) > 10:  # this is is SnowSurface
                 aspect = np.degrees(math.atan2(x_surface[0], x_surface[1]))
-                if (aspect < 0.0):
+                if aspect < 0.0:
                     aspect += 360.0
                 aspect = np.radians(aspect)
-                cos_i = (np.sin(np.radians(geom.solar_zenith)) * np.sin(np.radians(geom.slope)) *
-                        np.cos(np.radians(geom.solar_azimuth) - aspect) +
-                        np.cos(np.radians(geom.solar_zenith)) * np.cos(np.radians(geom.slope)))
-            else: # is IceSurface class
+                cos_i = np.sin(np.radians(geom.solar_zenith)) * np.sin(
+                    np.radians(geom.slope)
+                ) * np.cos(np.radians(geom.solar_azimuth) - aspect) + np.cos(
+                    np.radians(geom.solar_zenith)
+                ) * np.cos(
+                    np.radians(geom.slope)
+                )
+            else:  # is IceSurface class
                 cos_i = x_surface[0]
-            cos_i = max(0., min(cos_i, 1.0)) 
+            cos_i = max(0.0, min(cos_i, 1.0))
             cos_i = cos_i * geom.shadow
 
             L_down_dir = L_down_dir / coszen * cos_i
             L_down_dif = L_down_dif * geom.svf
-
 
         return (
             r,
@@ -515,7 +525,7 @@ class RadiativeTransfer:
             L_dif_dir,
             L_dir_dif,
             L_dif_dif,
-            L_slope_down
+            L_slope_down,
         )
 
     def drdn_dRT(self, x_RT, x_surface, geom, rho_dir_dir, rho_dif_dir, Ls, rdn):
@@ -601,7 +611,7 @@ class RadiativeTransfer:
                         L_dir_dif,
                         L_dif_dif,
                         L_slope,
-                    ) = self.calc_RT_quantities(x_RT_perturb,x_surface, geom)
+                    ) = self.calc_RT_quantities(x_RT_perturb, x_surface, geom)
 
                     rdne = self.calc_rdn(
                         x_RT_perturb,

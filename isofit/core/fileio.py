@@ -421,11 +421,11 @@ class IO:
             n_bands = len(band_names)
 
             if element_name == "posterior_uncertainty_file":
-                n_bands += 1 # BW NOTE, adding one for mean abs percent error
-                band_names.append('MAPE')
-            
+                n_bands += 1  # BW NOTE, adding one for mean abs percent error
+                band_names.append("MAPE")
+
             if element_name == "snow_albedo_file":
-                n_bands = 3 # addeding in 3 albedo outputs
+                n_bands = 3  # addeding in 3 albedo outputs
                 band_names = []
                 band_names.append("Total_Albedo")
                 band_names.append("Direct_Albedo")
@@ -455,8 +455,6 @@ class IO:
 
         # Load the earth sun distance data
         self.esd = self.load_esd()
-
-
 
         # Capping polynomial to not allow negative, or increasing trend, at very high ground altitudes (>6km).
         min_value = 0.25
@@ -535,29 +533,40 @@ class IO:
         self.adjust_aot_lower_bound = aot_poly["ATM_MIDLAT_WINTER"]
         self.adjust_h2o_upper_bound = h2o_poly["ATM_MIDLAT_WINTER"]
 
-
         loc_path = str(self.config.input.loc_file)
 
         # load the svf data
-        self.svf = rio.open(str(os.path.join(os.path.dirname(loc_path), "sky_view_factor"))).read(1).astype(float)
+        self.svf = (
+            rio.open(str(os.path.join(os.path.dirname(loc_path), "sky_view_factor")))
+            .read(1)
+            .astype(float)
+        )
 
         # Load the Slope data if there
         slope_path = str(os.path.join(os.path.dirname(loc_path), "slope.tif"))
         try:
-            self.slope = rio.open(slope_path).read(1).astype(float) 
+            self.slope = rio.open(slope_path).read(1).astype(float)
         except:
             self.slope = np.full_like(self.svf, fill_value=np.nan)
 
         # NOTE: in my implementation of shadow here, its ray tracing and 1 is sun and 0 is shadow.
         # flipped so i can just easily multiply by mu_s every time.
         try:
-            self.shadow = np.load(str(os.path.join(os.path.dirname(loc_path), "shadow.npy")), mmap_mode='r')
+            self.shadow = np.load(
+                str(os.path.join(os.path.dirname(loc_path), "shadow.npy")),
+                mmap_mode="r",
+            )
         except:
             self.shadow = np.ones_like(self.svf)
 
         try:
-            self.rho_e = np.load(str(os.path.join(os.path.dirname(loc_path), "rho_e.npy")), mmap_mode='r')
-            self.rho_terrain = np.load(str(os.path.join(os.path.dirname(loc_path), "rho_terrain.npy")), mmap_mode='r')
+            self.rho_e = np.load(
+                str(os.path.join(os.path.dirname(loc_path), "rho_e.npy")), mmap_mode="r"
+            )
+            self.rho_terrain = np.load(
+                str(os.path.join(os.path.dirname(loc_path), "rho_terrain.npy")),
+                mmap_mode="r",
+            )
             self.no_bkg = 0
         except:
             self.no_bkg = 1
@@ -575,18 +584,16 @@ class IO:
         # load endmember data
         # saved as tuple (mu, V)
         npv_file = env.path("data", f"npv_{data_sensor}.pkl")
-        with open(npv_file, 'rb') as f:
+        with open(npv_file, "rb") as f:
             self.npv = pickle.load(f)
 
         pv_file = env.path("data", f"pv_{data_sensor}.pkl")
-        with open(pv_file, 'rb') as f:
+        with open(pv_file, "rb") as f:
             self.pv = pickle.load(f)
 
-        soil_file = env.path("data", f"soil_{data_sensor}.pkl")         
-        with open(soil_file, 'rb') as f:
+        soil_file = env.path("data", f"soil_{data_sensor}.pkl")
+        with open(soil_file, "rb") as f:
             self.soil = pickle.load(f)
-        
-
 
     def get_components_at_index(self, row: int, col: int, bkg_solve=False) -> InputData:
         """
@@ -599,7 +606,7 @@ class IO:
         Returns:
             InputData: object containing all current data reads
         """
-        #print(row,col)
+        # print(row,col)
         # Prepare out input data object by blanking it out
         self.current_input_data.clear()
 
@@ -644,16 +651,18 @@ class IO:
         # specified in the input configuration block, the associated entries
         # will be 'None'. The Geometry object will use reasonable defaults.
         slope = self.slope[row, col]
-        svf = self.svf[row,col]
-        shadow = self.shadow[row,col]
+        svf = self.svf[row, col]
+        shadow = self.shadow[row, col]
 
         if self.no_bkg == 1 or bkg_solve == True:
             bkg_terms = (None, None)
         else:
             # recast to float 32
-            bkg_terms = (self.rho_e[row,col,:].astype(np.float32), self.rho_terrain[row,col,:].astype(np.float32))
-            #bkg_terms = (self.rho_e, self.rho_terrain)
-
+            bkg_terms = (
+                self.rho_e[row, col, :].astype(np.float32),
+                self.rho_terrain[row, col, :].astype(np.float32),
+            )
+            # bkg_terms = (self.rho_e, self.rho_terrain)
 
         geom = Geometry(
             obs=data["obs_file"],
@@ -662,8 +671,11 @@ class IO:
             svf=svf,
             shadow=shadow,
             slope=slope,
-            modtran_adjustments=(self.adjust_h2o_upper_bound, self.adjust_aot_lower_bound),
-            endmember_data = (self.pv, self.npv, self.soil, self.meas_wl),
+            modtran_adjustments=(
+                self.adjust_h2o_upper_bound,
+                self.adjust_aot_lower_bound,
+            ),
+            endmember_data=(self.pv, self.npv, self.soil, self.meas_wl),
             bkg_terms=bkg_terms,
         )
 
@@ -733,7 +745,7 @@ class IO:
             # Write a bad data flag
             atm_bad = np.zeros(len(fm.instrument.n_chan) * 5) * -9999.0
             state_bad = np.zeros(len(fm.statevec)) * -9999.0
-            state_bad_unc = np.zeros(len(fm.statevec)+1) * -9999.0
+            state_bad_unc = np.zeros(len(fm.statevec) + 1) * -9999.0
             data_bad = np.zeros(fm.instrument.n_chan) * -9999.0
             to_write = {
                 "estimated_state_file": state_bad,
@@ -748,7 +760,7 @@ class IO:
                 "radiometry_correction_file": data_bad,
                 "spectral_calibration_file": data_bad,
                 "posterior_uncertainty_file": state_bad_unc,
-                "snow_albedo_file": np.array([-9999.0,-9999.0,-9999.0])
+                "snow_albedo_file": np.array([-9999.0, -9999.0, -9999.0]),
             }
 
         else:
@@ -768,7 +780,9 @@ class IO:
                 to_write["estimated_state_file"] = state_est
 
             # always run albedo
-            to_write["snow_albedo_file"] = np.array([geom.a_total, geom.a_direct, geom.a_diffuse])
+            to_write["snow_albedo_file"] = np.array(
+                [geom.a_total, geom.a_direct, geom.a_diffuse]
+            )
 
             if "path_radiance_file" in self.output_datasets:
                 # Note: for glint models, this will return atm + glint
@@ -792,9 +806,9 @@ class IO:
                 U = np.sqrt(np.diag(S_hat))
                 asp_rad = math.atan2(U[0], U[1])
                 asp_deg = np.degrees(asp_rad)
-                U[0] = asp_rad # NOTE first one is aspect radians
-                U[1] = asp_deg # second is aspect degrees
-                uncert_out = np.append(U, geom.MAPE)    
+                U[0] = asp_rad  # NOTE first one is aspect radians
+                U[1] = asp_deg  # second is aspect degrees
+                uncert_out = np.append(U, geom.MAPE)
                 to_write["posterior_uncertainty_file"] = uncert_out
                 # NOTE BW: aspect is scaled by atan2
 

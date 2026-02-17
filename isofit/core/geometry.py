@@ -39,8 +39,8 @@ class Geometry:
         shadow: np.array = None,
         slope: float = None,
         modtran_adjustments: tuple = (None, None),
-        endmember_data: tuple = (None, None, None, None),   
-        bkg_terms: tuple = (None, None)    
+        endmember_data: tuple = (None, None, None, None),
+        bkg_terms: tuple = (None, None),
     ):
         # Set some benign defaults...
         self.observer_zenith = (
@@ -55,7 +55,7 @@ class Geometry:
         self.observer_altitude_km = None
         self.surface_elevation_km = None
         self.earth_sun_distance = None
-        self.esd_factor = 1.
+        self.esd_factor = 1.0
 
         # set for initial write?
         self.a_total = 0.0
@@ -73,8 +73,8 @@ class Geometry:
         self.svf = svf
 
         # check on svf
-        if self.svf<0.0 or self.svf>1.0:
-            self.svf=1.0 # assume nan data and assume safe assumption of 1.
+        if self.svf < 0.0 or self.svf > 1.0:
+            self.svf = 1.0  # assume nan data and assume safe assumption of 1.
 
         self.cos_i = None
 
@@ -106,14 +106,14 @@ class Geometry:
             self.observer_zenith = obs[2]  # 0 to 90 from zenith
             self.solar_azimuth = obs[3]  # 0 to 360 clockwise from N
             self.solar_zenith = obs[4]  # 0 to 90 from zenith
-            if np.isnan(self.slope): # slope data not given, take from loc file
-                self.slope = obs[6] # slope in degrees
-            self.aspect = obs[7] # aspect in degrees
+            if np.isnan(self.slope):  # slope data not given, take from loc file
+                self.slope = obs[6]  # slope in degrees
+            self.aspect = obs[7]  # aspect in degrees
             self.cos_i = obs[8]  # cosine of eSZA
             # calculate relative to-sun azimuth
             delta_phi = np.abs(self.solar_azimuth - self.observer_azimuth)
             self.relative_azimuth = np.minimum(delta_phi, 360 - delta_phi)  # 0 to 180
-        
+
         # The 'loc' object is a list-like object that optionally contains
         # latitude and longitude information about the surface being
         # observed.
@@ -133,19 +133,25 @@ class Geometry:
             )
 
         if dt is not None:
-            self.esd_factor = 1.
+            self.esd_factor = 1.0
 
         # apply modtran adjustment  here
         # BW
         if modtran_adjustments != (None, None):
-            self.interp_h2o_upper_bound, self.interp_aot_lower_bound = modtran_adjustments[0], modtran_adjustments[1]
-            self.h2o_upper_bound = self.interp_h2o_upper_bound(self.surface_elevation_km)
-            self.aot_lower_bound = self.interp_aot_lower_bound(self.surface_elevation_km)
-        
-        # Background terms
-        self.rho_e = bkg_terms[0] # assuming 1km
-        self.rho_terrain = bkg_terms[1] # assuming 0.5km
+            self.interp_h2o_upper_bound, self.interp_aot_lower_bound = (
+                modtran_adjustments[0],
+                modtran_adjustments[1],
+            )
+            self.h2o_upper_bound = self.interp_h2o_upper_bound(
+                self.surface_elevation_km
+            )
+            self.aot_lower_bound = self.interp_aot_lower_bound(
+                self.surface_elevation_km
+            )
 
+        # Background terms
+        self.rho_e = bkg_terms[0]  # assuming 1km
+        self.rho_terrain = bkg_terms[1]  # assuming 0.5km
 
     def get_esd_factor(self, date_time: datetime):
         """Get distance ratio from sun based on time of year, relative to day 1

@@ -3,7 +3,6 @@ import numpy as np
 from joblib import Parallel, delayed
 
 
-
 def resample_spectrum(
     x: np.array,
     wl: np.array,
@@ -121,18 +120,14 @@ def spectral_response_function(response_range: np.array, mu: float, sigma: float
     return srf
 
 
-
-
-
 def load_sensor_spec(filepath):
     """
     Loads sensor data
     """
     data = np.loadtxt(filepath)
     wl = data[:, 1]
-    fwhm = data[:, 2] 
+    fwhm = data[:, 2]
     return wl, fwhm
-
 
 
 def resample_disort_lut(
@@ -146,9 +141,9 @@ def resample_disort_lut(
 
     # Load the DISORT LUT
     ds = xr.load_dataset(input_nc_path)
-    disort_wl = ds['wavelength'].values
+    disort_wl = ds["wavelength"].values
 
-   # Parallel resampling function
+    # Parallel resampling function
     def resample_variable(data):
         shape = data.shape[:-1]
         data_reshaped = data.reshape(-1, data.shape[-1])
@@ -160,28 +155,30 @@ def resample_disort_lut(
 
         return np.stack(resampled).reshape(*shape, len(sensor_wl))
 
-    brdf_resampled = resample_variable(ds['r_dd'].values)
-    hdrf_resampled = resample_variable(ds['r_hd'].values)
-    a_dir_resampled = resample_variable(ds['a_dd'].values)
-    a_diff_resampled = resample_variable(ds['a_hd'].values)
+    brdf_resampled = resample_variable(ds["r_dd"].values)
+    hdrf_resampled = resample_variable(ds["r_hd"].values)
+    a_dir_resampled = resample_variable(ds["a_dd"].values)
+    a_diff_resampled = resample_variable(ds["a_hd"].values)
 
     # save to a new file
     ds_out = xr.Dataset(
         {
-            "r_dd": (ds['r_dd'].dims[:-1] + ('wavelength',), brdf_resampled),
-            "r_hd": (ds['r_hd'].dims[:-1] + ('wavelength',), hdrf_resampled),
-            "a_dd": (ds['a_dd'].dims[:-1] + ('wavelength',), a_dir_resampled),
-            "a_hd": (ds['a_hd'].dims[:-1] + ('wavelength',), a_diff_resampled)
+            "r_dd": (ds["r_dd"].dims[:-1] + ("wavelength",), brdf_resampled),
+            "r_hd": (ds["r_hd"].dims[:-1] + ("wavelength",), hdrf_resampled),
+            "a_dd": (ds["a_dd"].dims[:-1] + ("wavelength",), a_dir_resampled),
+            "a_hd": (ds["a_hd"].dims[:-1] + ("wavelength",), a_diff_resampled),
         },
-        coords={**{k: ds.coords[k] for k in ds.coords if k != 'wavelength'},
-                "wavelength": sensor_wl}
+        coords={
+            **{k: ds.coords[k] for k in ds.coords if k != "wavelength"},
+            "wavelength": sensor_wl,
+        },
     )
 
-    ds_out.attrs["description"] = "Resampled DISORT LUT for EMIT sensor. Optically thick snow layer."
+    ds_out.attrs["description"] = (
+        "Resampled DISORT LUT for EMIT sensor. Optically thick snow layer."
+    )
     ds_out.attrs["units"] = "wavelength in nanometers"
     ds_out.to_netcdf(output_nc_path)
-
-
 
 
 if __name__ == "__main__":
@@ -191,6 +188,5 @@ if __name__ == "__main__":
     sensor_file = "/Users/bawilder/Code/melt-metrics/bw-wave/emit-wave.txt"
     output_nc = "/Users/bawilder/Code/snow/LUT/disort_snow_lut_EMIT.nc"
     ########
-
 
     resample_disort_lut(input_nc, output_nc, sensor_file, n_cpus=12)

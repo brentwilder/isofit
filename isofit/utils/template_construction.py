@@ -86,7 +86,7 @@ class Pathnames:
         self.input_radiance_file = input_radiance
         self.input_loc_file = input_loc
         self.input_obs_file = input_obs
-        #self.input_svf_file = join(os.path.dirname(input_obs), "svf")
+        # self.input_svf_file = join(os.path.dirname(input_obs), "svf")
         self.working_directory = abspath(working_directory)
 
         self.full_lut_directory = abspath(join(self.working_directory, "lut_full/"))
@@ -99,8 +99,6 @@ class Pathnames:
         self.data_directory = abspath(join(self.working_directory, "data/"))
         self.input_data_directory = abspath(join(self.working_directory, "input/"))
         self.output_directory = abspath(join(self.working_directory, "output/"))
-
-        
 
         # define all output names
         rdn_fname = self.fid + "_rdn"
@@ -119,7 +117,7 @@ class Pathnames:
         self.snowalbedo_working_path = abspath(
             join(self.output_directory, rdn_fname.replace("_rdn", "_snow_albedo"))
         )
-    
+
         self.surface_working_path = abspath(join(self.data_directory, "surface.mat"))
 
         if copy_input_files is True:
@@ -136,7 +134,7 @@ class Pathnames:
             self.radiance_working_path = abspath(self.input_radiance_file)
             self.obs_working_path = abspath(self.input_obs_file)
             self.loc_working_path = abspath(self.input_loc_file)
-            #self.svf_working_path = abspath(self.input_svf_file)
+            # self.svf_working_path = abspath(self.input_svf_file)
 
         if interpolate_inplace:
             self.radiance_interp_path = self.radiance_working_path
@@ -215,7 +213,7 @@ class Pathnames:
 
         if sensor == "avcl":
             self.noise_path = str(env.path("data", "avirisc_noise.txt"))
-        #if sensor == "ang":
+        # if sensor == "ang":
         #    self.noise_path = str(env.path("data", "avirisng_noise.txt"))
         elif sensor == "oci":
             self.noise_path = str(env.path("data", "oci", "oci_noise.txt"))
@@ -388,9 +386,9 @@ class LUTConfig:
         self.no_min_lut_spacing = no_min_lut_spacing
 
         # NOTE: BW updates using custom grids. Set defaults here
-        #self.custom_spacing = False
-        #self.h2o_actual = [0.001, 1]
-        #self.aot_550_actual = [0.001, 1]
+        # self.custom_spacing = False
+        # self.h2o_actual = [0.001, 1]
+        # self.aot_550_actual = [0.001, 1]
 
         # overwrite anything that comes in from the config file
         if lut_config_file is not None:
@@ -920,7 +918,7 @@ def build_main_config(
     if h2o_lut_grid is not None:
         radiative_transfer_config["statevector"]["H2OSTR"] = {
             "bounds": [h2o_lut_grid[0], h2o_lut_grid[-1]],
-            #"bounds": [0.05, 0.25],
+            # "bounds": [0.05, 0.25],
             "scale": 1,
             "init": 0.05,
             "prior_sigma": 100.0,
@@ -991,9 +989,13 @@ def build_main_config(
         isofit_config_modtran["input"]["loc_file"] = paths.loc_working_path
         isofit_config_modtran["input"]["obs_file"] = paths.obs_working_path
 
-        isofit_config_modtran["output"]["snow_albedo_file"] = paths.snowalbedo_working_path
+        isofit_config_modtran["output"][
+            "snow_albedo_file"
+        ] = paths.snowalbedo_working_path
 
-        isofit_config_modtran["output"]["posterior_uncertainty_file"] = paths.uncert_working_path
+        isofit_config_modtran["output"][
+            "posterior_uncertainty_file"
+        ] = paths.uncert_working_path
 
         isofit_config_modtran["output"][
             "estimated_reflectance_file"
@@ -1241,21 +1243,19 @@ def load_climatology(
         lut_params.aot_550_spacing_min,
     )
 
-    #if lut_params.custom_spacing is True:
+    # if lut_params.custom_spacing is True:
     #    aot_550_lut = lut_params.aot_550_actual
 
-
-
     if aot_550_lut is not None:
-        #aerosol_lut_grid["AOT550"] = aot_550_lut
+        # aerosol_lut_grid["AOT550"] = aot_550_lut
         aerosol_lut_grid["AOT550"] = aot_550_lut.tolist()
         alr = [aerosol_lut_grid["AOT550"][0], aerosol_lut_grid["AOT550"][-1]]
         aerosol_state_vector["AOT550"] = {
             "bounds": [float(alr[0]), float(alr[1])],
-            #"bounds": [0.03, 0.6],
-            "scale": 1.,
+            # "bounds": [0.03, 0.6],
+            "scale": 1.0,
             "init": 0.1001,
-            "prior_sigma": 100.,
+            "prior_sigma": 100.0,
             "prior_mean": float(0.1),
         }
 

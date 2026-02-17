@@ -150,7 +150,7 @@ def invert_algebraic(
     geom: Geometry,
 ):
     """Inverts radiance algebraically using Lambertian assumptions to get a
-    reflectance. 
+    reflectance.
 
     Args:
         surface: surface model
@@ -418,7 +418,7 @@ def invert_simple(forward: ForwardModel, meas: np.array, geom: Geometry):
         x[forward.idx_RT] = heuristic_atmosphere(
             RT, instrument, x_RT, x_instrument, meas, geom
         )
-    
+
     # Now, with atmosphere fixed, we can invert the radiance algebraically
     # via Lambertian approximations to get reflectance
     x_surface, x_RT, x_instrument = forward.unpack(x)
@@ -451,11 +451,13 @@ def invert_simple(forward: ForwardModel, meas: np.array, geom: Geometry):
     # NOTE: BW EDITS
     # converting "fit_params" to actually solve for radiance,
     # so that way we can also get a better inital fit for cos-i and cos-v.. (i.e., aspect)
-    rhoatm, sphalb, transm, solar_irr, coszen, transup = coeffs 
+    rhoatm, sphalb, transm, solar_irr, coszen, transup = coeffs
     L_atm = RT.get_L_atm(x_RT, geom)
     L_down, L_dir, L_dif = RT.get_L_down_transmitted(x_RT, geom)
 
-    x_surface[forward.idx_surface] = forward.surface.fit_params(meas, L_atm, L_dir, L_dif, sphalb, geom)
+    x_surface[forward.idx_surface] = forward.surface.fit_params(
+        meas, L_atm, L_dir, L_dif, sphalb, geom
+    )
 
     # Find temperature of emissive surfaces
     if tir_present:

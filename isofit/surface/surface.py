@@ -15,7 +15,7 @@
 #  limitations under the License.
 #
 # ISOFIT: Imaging Spectrometer Optimal FITting
-# Author: David R Thompson, david.r.thompson@jpl.nasa.gov 
+# Author: David R Thompson, david.r.thompson@jpl.nasa.gov
 #
 from __future__ import annotations
 

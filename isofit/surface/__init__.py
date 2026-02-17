@@ -4,6 +4,7 @@ from isofit.surface.surface_multicomp import MultiComponentSurface
 from isofit.surface.surface_snow import SnowSurface
 from isofit.surface.surface_ice import IceSurface
 
+
 def Surface(config):
     """
     Reads an ISOFIT full config and initializes the desired Surface model
@@ -28,7 +29,7 @@ def Surface(config):
 
     elif category == "lut_surface":
         return LUTSurface(config)
-    
+
     elif category == "snow_surface":
         return SnowSurface(config)
 
