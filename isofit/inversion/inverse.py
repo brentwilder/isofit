@@ -309,6 +309,10 @@ class Inversion:
         if self.mode == "simulation":
             self.fm.surface.rfl = meas
             return np.array([self.fm.init.copy()])
+        
+        if meas[0] == 0.0:
+            self.fm.surface.rfl = meas
+            return np.array([self.fm.init.copy()])        
 
         if len(self.integration_grid.values()) == 0:
             combo_values = [None]
@@ -363,7 +367,13 @@ class Inversion:
             # measurement noise from the instrument as well as variability due to
             # unknown variables. For speed, we will calculate it just once based
             # on the initial solution (a potential minor source of inaccuracy).
-            Seps_inv, Seps_inv_sqrt = self.calc_Seps(x, meas, geom)
+            try:
+                Seps_inv, Seps_inv_sqrt = self.calc_Seps(x, meas, geom)
+                #logging.info("Seps had bad thing happen")
+
+            except:
+                return np.array([x0])
+        
 
             def jac(x_free):
                 """Short wrapper function for use with scipy opt"""

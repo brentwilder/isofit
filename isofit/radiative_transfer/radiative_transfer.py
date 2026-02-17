@@ -204,6 +204,10 @@ class RadiativeTransfer:
             geom.bg_rfl if isinstance(geom.bg_rfl, np.ndarray) else rho_dif_dir
         )
 
+        # AV3
+        rho_dif_dif = rho_dir_dir
+        rho_dir_dif = rho_dir_dir
+
         # Atmospheric path radiance
         L_atm = self.get_L_atm(x_RT, geom)
 
@@ -319,11 +323,6 @@ class RadiativeTransfer:
             verified_geom["cos_i"],
             verified_geom["skyview_factor"],
         )
-        # Pretend that the surface is flat, regardless of input geometry
-        if self.terrain_style == "flat":
-            cos_i = coszen
-
-        cos_i = max(self.min_cos_i, cos_i)
 
         # radiances along all optical paths
         L_coupled = []
@@ -352,24 +351,33 @@ class RadiativeTransfer:
         # for now, this is always set to 1.0.
         b = 1.0
 
+        # Assumption of the topography of the background
+        cos_i_bg = coszen
+        skyview_factor_bg = 1.0
+
+
+        # AV3
+        cos_i = coszen
+
         # Assigning coupled terms, unscaling and rescaling downward direct radiance by local solar zenith angle.
         # Downward diffuse components are scaled by viewable sky fraction (i.e., "ungula" of viewable sky in solid geometry terms).
         L_dir_dir = L_coupled[0] / coszen * cos_i * b
         L_dif_dir = L_coupled[1]
-        L_dir_dif = L_coupled[2] / coszen * cos_i * b
+        L_dir_dif = L_coupled[2] / coszen * cos_i_bg
         L_dif_dif = L_coupled[3]
 
         # Note - we should really be doing the multiplication upstream before convolution - this is an approximation
         # Correct downward diffuse term for topographic assuming Hay's model (Hay 1979; Richter 1998; Guanter et al., 2009)
         t_down_dir = r["transm_down_dir"]
-        hays_model = (b * t_down_dir * (cos_i / coszen)) + (
+        L_dif_dir *= (b * t_down_dir * (cos_i / coszen)) + (
             (1 - b * t_down_dir) * skyview_factor
         )
-        # applies to the downward diffuse terms
-        L_dif_dir *= hays_model
-        L_dif_dif *= hays_model
+        L_dif_dif *= (t_down_dir * (cos_i_bg / coszen)) + (
+            (1 - t_down_dir) * skyview_factor_bg
+        )
 
         return L_dir_dir, L_dif_dir, L_dir_dif, L_dif_dif
+
 
     def calc_RT_quantities(self, x_RT: np.ndarray, geom: Geometry):
         """Retrieves the RT quantities including the LUT sample (r),

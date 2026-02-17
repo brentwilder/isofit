@@ -30,6 +30,7 @@ from isofit.utils import (
     segment,
 )
 from isofit.utils.skyview import skyview
+from isofit.utils.background_reflectance import background_reflectance
 
 EPS = 1e-6
 CHUNKSIZE = 256
@@ -108,10 +109,11 @@ def apply_oe(
     skyview_factor=None,
     resources=False,
     retrieve_co2=False,
+    use_background_rfl=False,
     eof_path=None,
     terrain_style="dem",
 ):
-    """
+    """\
     Applies OE over a flightline using a radiative transfer engine. This executes
     ISOFIT in a generalized way, accounting for the types of variation that might be
     considered typical.
@@ -120,6 +122,7 @@ def apply_oe(
     geometry lookup tables and provide a heuristic means of determining atmospheric
     water ranges.
 
+    \b
     Parameters
     ----------
     input_radiance : str
@@ -247,12 +250,15 @@ def apply_oe(
         Enables the system resource tracker. Must also have the log_file set.
     retrieve_co2 : bool, default=False
         Flag to retrieve CO2 in the state vector. Only available with emulator at the moment.
+    use_background_rfl : bool, default=False
+        Flag to calculate background reflectance based on presolve. Presolve must also be turned on.
     eof_path : str, default=None
         Add 1 or 2 Empirical Orthogonal Functions to the state vector.  File is a 1-2 column text file
         with one number per instrument channel.
     terrain_style : str, default=dem
         Flag to set the terrain style.  dem uses provided obs values, flat sets the surface to the spheroid
 
+    \b
     References
     ----------
     D.R. Thompson, A. Braverman,P.G. Brodrick, A. Candela, N. Carbon, R.N. Clark,D. Connelly, R.O. Green, R.F.
@@ -260,6 +266,7 @@ def apply_oe(
     D.S. Wettergreen. Quantifying Uncertainty for Remote Spectroscopy of Surface Composition. Remote Sensing of
     Environment, 2020. doi: https://doi.org/10.1016/j.rse.2020.111898.
 
+    \b
     sRTMnet emulator:
     P.G. Brodrick, D.R. Thompson, J.E. Fahlen, M.L. Eastwood, C.M. Sarture, S.R. Lundeen, W. Olson-Duvall,
     N. Carmon, and R.O. Green. Generalized radiative transfer emulation for imaging spectroscopy reflectance
@@ -303,6 +310,11 @@ def apply_oe(
             raise ValueError(
                 "If num_neighbors has multiple elements, only --analytical_line is valid"
             )
+
+    if use_background_rfl and not presolve:
+        raise ValueError(
+            "Background reflectance can only be used if presolve is turned on."
+        )
 
     if os.path.isdir(working_directory) is False:
         os.mkdir(working_directory)
@@ -419,6 +431,7 @@ def apply_oe(
         skyview_factor=skyview_factor,
         subs=True if analytical_line or empirical_line else False,
         classify_multisurface=classify_multisurface,
+        use_background_rfl=use_background_rfl,
         eof_path=eof_path,
     )
     paths.make_directories()
@@ -675,10 +688,11 @@ def apply_oe(
             ihaze_type="AER_NONE",
         )
 
-        if emulator_base is None and prebuilt_lut is None:
-            max_water = tmpl.calc_modtran_max_water(paths)
-        else:
-            max_water = 6
+        #if emulator_base is None and prebuilt_lut is None:
+        #    max_water = tmpl.calc_modtran_max_water(paths)
+        #else:
+        #    max_water = 6
+        max_water = 6
 
         # run H2O grid as necessary
         if not exists(envi_header(paths.h2o_subs_path)) or not exists(
@@ -818,6 +832,26 @@ def apply_oe(
             logging.info("`config_only` enabled, exiting early")
             return
 
+        # Run background reflectance retrieval after config created
+        if presolve and use_background_rfl:
+            logging.info("Preparing background reflectance...")
+            background_reflectance(
+                input_radiance=input_radiance,
+                input_loc=input_loc,
+                input_obs=input_obs,
+                paths=paths,
+                mean_altitude_km=mean_altitude_km,
+                mean_elevation_km=mean_elevation_km,
+                smoothing_sigma=atm_sigma,
+                use_slic_rfls=False,
+                use_superpixels=use_superpixels,
+                nodata_value=-9999,
+                chunksize=CHUNKSIZE,
+                logging_level=logging_level,
+                log_file=log_file,
+                n_cores=n_cores,
+            )
+
         # Run retrieval
         logging.info("Running ISOFIT with full LUT")
         retrieval_full = isofit.Isofit(
@@ -869,6 +903,7 @@ def apply_oe(
                 output_rfl_file=paths.rfl_working_path,
                 output_unc_file=paths.uncert_working_path,
                 skyview_factor_file=paths.svf_working_path,
+                bgrfl_file=paths.bgrfl_working_path,
                 loglevel=logging_level,
                 logfile=log_file,
                 n_atm_neighbors=nneighbors,
@@ -885,7 +920,7 @@ def apply_oe(
 
 
 # Input arguments
-@click.command(name="apply_oe", no_args_is_help=True)
+@click.command(name="apply_oe", help=apply_oe.__doc__, no_args_is_help=True)
 @click.argument("input_radiance")
 @click.argument("input_loc")
 @click.argument("input_obs")
@@ -928,6 +963,7 @@ def apply_oe(
 @click.option("--skyview_factor", type=str, default=None)
 @click.option("-r", "--resources", is_flag=True, default=False)
 @click.option("--retrieve_co2", is_flag=True, default=False)
+@click.option("--use_background_rfl", is_flag=True, default=False)
 @click.option("--eof_path", default=None)
 @click.option("--terrain_style", default="dem", type=click.Choice(["dem", "flat"]))
 @click.option(
@@ -958,8 +994,6 @@ def cli(debug_args, profile, **kwargs):
 
     print("Done")
 
-
-cli.__doc_source__ = apply_oe
 
 if __name__ == "__main__":
     raise NotImplementedError(

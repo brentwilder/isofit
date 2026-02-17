@@ -59,6 +59,7 @@ class Pathnames:
         skyview_factor=None,
         subs: bool = False,
         classify_multisurface: bool = False,
+        use_background_rfl: bool = True,
         eof_path=None,
     ):
         # Determine FID based on sensor name
@@ -127,6 +128,17 @@ class Pathnames:
         )
         self.surface_template_path = abspath(join(self.data_directory, "surface.mat"))
         self.surface_working_paths = {}
+
+        if use_background_rfl:
+            self.bgrfl_working_path = abspath(
+                join(self.data_directory, rdn_fname.replace("_rdn", "_bgrfl"))
+            )
+            self.atm_presolve = abspath(
+                join(self.output_directory, rdn_fname.replace("_rdn", "_atm_presolve"))
+            )
+        else:
+            self.bgrfl_working_path = None
+            self.atm_presolve = None
 
         if copy_input_files is True:
             self.radiance_working_path = abspath(
@@ -212,6 +224,13 @@ class Pathnames:
         self.svf_subs_path = abspath(
             join(self.input_data_directory, self.fid + "_subs_svf")
         )
+
+        if use_background_rfl:
+            self.bgrfl_subs_path = abspath(
+                join(self.input_data_directory, self.fid + "_subs_bgrfl")
+            )
+        else:
+            self.bgrfl_subs_path = None
 
         self.rdn_subs_path = abspath(
             join(self.input_data_directory, self.fid + "_subs_rdn")
@@ -684,9 +703,10 @@ def build_config(
     multipart_transmittance: bool = False,
     surface_mapping: dict = None,
     retrieve_co2: bool = False,
+    eof_path: str = None,
     presolve: bool = False,
-    terrain_style: str = "flat",
-    cos_i_min: float = 0.3,
+    terrain_style: str = "dem",
+    cos_i_min: float = 0.0,
 ) -> None:
     """Write an isofit config file for the main solve, using the specified pathnames and all given info
 
@@ -717,6 +737,7 @@ def build_config(
         multipart_transmittance:              flag to indicate whether a 4-component transmittance model is to be used
         surface_mapping:                      optional object to pass mapping between surface class and surface model
         retrieve_co2:                         flag to include CO2 in lut and retrieval
+        eof_path:                             path to the EOF file
         presolve:                             set this up as a presolve configuration
         terrain_style:                        style of terrain to use in the forward model - options are 'flat', 'dem', 'solved'
         cos_i_min:                            minimum cosine of incidence angle to allow isofit to use in the forward model
@@ -741,7 +762,7 @@ def build_config(
     )
 
     if emulator_base is None:
-        engine_name = "modtran"
+        engine_name = "LibRadTran"
     elif emulator_base.endswith(".jld2"):
         engine_name = "KernelFlowsGP"
     else:
@@ -912,6 +933,10 @@ def build_config(
             output["estimated_state_file"] = paths.state_subs_path
             output["posterior_uncertainty_file"] = paths.uncert_subs_path
             output["estimated_reflectance_file"] = paths.rfl_subs_path
+            if paths.bgrfl_subs_path:
+                isofit_config_modtran["input"][
+                    "background_reflectance_file"
+                ] = paths.bgrfl_subs_path
     else:
         input["measured_radiance_file"] = paths.radiance_working_path
         input["loc_file"] = paths.loc_working_path
@@ -925,6 +950,10 @@ def build_config(
             output["posterior_uncertainty_file"] = paths.uncert_working_path
             output["estimated_reflectance_file"] = paths.rfl_working_path
             output["estimated_state_file"] = paths.state_working_path
+            if paths.bgrfl_working_path:
+                isofit_config_modtran["input"][
+                    "background_reflectance_file"
+                ] = paths.bgrfl_working_path
     isofit_config_modtran["output"].update(output)
     isofit_config_modtran["input"].update(input)
 
