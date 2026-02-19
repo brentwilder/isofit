@@ -755,9 +755,9 @@ def apply_oe(
         aot_est = h2o.read_band(band_names.index(aot_name))[:].flatten()
         aot_est = aot_est[~np.isnan(aot_est)]
 
-        # Abitrary number, but however many DDV (super)pixels we would want to trust a statistic.
+        # Assume 2% threshold to use retreivals from DDV
         # If condition is not met, then the aerosol range is left as it was before presolve
-        if len(aot_est) >= 25:
+        if len(aot_est) / len(h2o_est) >= 0.02:
             # update aerosol grid for main solve
             p98_aot = np.percentile(aot_est, 98)
             lut_params.aot_550_range[1] = min(1.0, p98_aot)
