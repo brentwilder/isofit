@@ -21,24 +21,21 @@
 import json
 import os
 from collections import OrderedDict
+from difflib import SequenceMatcher
 from os.path import expandvars
 from typing import List
 
 import numpy as np
-import scipy.linalg
 
 # sc Adding in xarray for non-gauss SRF file io
 import xarray as xr
 import xxhash
 from scipy.interpolate import RegularGridInterpolator
 
-### Variables ###
+from isofit.core import units
 
 # small value used in finite difference derivatives
 eps = 1e-5
-
-
-### Classes ###
 
 # Global variable makes it non-shared mem in ray
 Cache = {"stats": {}}
@@ -217,7 +214,7 @@ def load_wavelen(wavelength_file: str):
     if q.shape[1] > 2:
         q = q[:, 1:3]
     if q[0, 0] < 100:
-        q = q * 1000.0
+        q = units.micron_to_nm(q)
     wl, fwhm = q.T
     return wl, fwhm
 
@@ -246,8 +243,8 @@ def emissive_radiance(
     # photon energy in eV
     eV_per_sec_cm2_sr_nm = 1.2398 * ph_per_sec_cm2_sr_nm / wl_um
     W_per_cm2_sr_nm = J_per_eV * eV_per_sec_cm2_sr_nm
-    uW_per_cm2_sr_nm = W_per_cm2_sr_nm * 1e6
-    dRdn_dT = (
+    uW_per_cm2_sr_nm = units.W_to_uW(W_per_cm2_sr_nm)
+    dRdn_dT = units.W_to_uW(
         c_1
         / (wl**4)
         * (-pow(np.exp(c_2 / wl / T) - 1.0, -2.0))
@@ -257,7 +254,6 @@ def emissive_radiance(
         / wl_um
         * 1.2398
         * J_per_eV
-        * 1e6
     )
     return uW_per_cm2_sr_nm, dRdn_dT
 
@@ -384,7 +380,7 @@ def get_absorption(wl: np.array, absfile: str) -> (np.array, np.array):
 
     Args:
         wl: wavelengths to interpolate to
-        absfile: file containing indices of refraction
+        absfile: file containing indices of refraction. Wavelength unts are in nm.
 
     Returns:
         np.array: interpolated, wavelength-specific water absorption coefficients
@@ -395,7 +391,7 @@ def get_absorption(wl: np.array, absfile: str) -> (np.array, np.array):
     # read the indices of refraction
     q = np.loadtxt(absfile, delimiter=",")
     wl_orig_nm = q[:, 0]
-    wl_orig_cm = wl_orig_nm / 1e9 * 1e2
+    wl_orig_cm = units.nm_to_cm(wl_orig_nm)
     water_imag = q[:, 2]
     ice_imag = q[:, 4]
 
@@ -407,36 +403,6 @@ def get_absorption(wl: np.array, absfile: str) -> (np.array, np.array):
     water_abscf_intrp = np.interp(wl, wl_orig_nm, water_abscf)
     ice_abscf_intrp = np.interp(wl, wl_orig_nm, ice_abscf)
     return water_abscf_intrp, ice_abscf_intrp
-
-
-def get_refractive_index(k_wi, a, b, col_wvl, col_k):
-    """Convert refractive index table entries to numpy array.
-
-    Args:
-        k_wi:    variable
-        a:       start line
-        b:       end line
-        col_wvl: wavelength column in pandas table
-        col_k:   k column in pandas table
-
-    Returns:
-        wvl_arr: array of wavelengths
-        k_arr:   array of imaginary parts of refractive index
-    """
-
-    wvl_ = []
-    k_ = []
-
-    for ii in range(a, b):
-        wvl = k_wi.at[ii, col_wvl]
-        k = k_wi.at[ii, col_k]
-        wvl_.append(wvl)
-        k_.append(k)
-
-    wvl_arr = np.asarray(wvl_)
-    k_arr = np.asarray(k_)
-
-    return wvl_arr, k_arr
 
 
 def recursive_reencode(j, shell_replace: bool = True):
@@ -546,32 +512,23 @@ def find_header(imgfile: str) -> str:
     raise IOError("No header found for file {0}".format(imgfile))
 
 
-def resample_spectrum(
-    x: np.array,
-    wl: np.array,
-    wl2: np.array,
-    fwhm2: np.array,
-    fill: bool = False,
-    srf_file: str = None,
+def calculate_resample_matrix(
+    wl: np.array, wl2: np.array, fwhm2: np.array, srf_file: str = None
 ) -> np.array:
-    """Resample a spectrum to a new wavelength / FWHM.
-       Assumes Gaussian SRFs.
+    """Calculate the resampling matrix for a given set of wavelengths and FWHM.
+    Once calculated, resmpling is just the dot product of this matrix with the
+    vector to be resampled.
 
     Args:
-        x: radiance vector
         wl: sample starting wavelengths
         wl2: wavelengths to resample to
         fwhm2: full-width-half-max at resample resolution
-        fill: boolean indicating whether to fill in extrapolated regions
-        ### sc Adding for non-Gaussian SRF ###
         srf_file: SRF for the sensor if not assuming Gaussian
 
     Returns:
-        np.array: interpolated radiance vector
-
+        np.array: transformation matrix (H)
     """
-    # sc including if else to add non-Gaussian SRF
-    # Probably a better way than this with file paths, etc.
+
     if srf_file is None:
         H = np.array(
             [
@@ -595,6 +552,40 @@ def resample_spectrum(
         # Normalize H to unit length
         H = rsr_channel_res / np.sum(rsr_channel_res, axis=1)[:, np.newaxis]
         H[np.isnan(H)] = 0
+
+    return H
+
+
+def resample_spectrum(
+    x: np.array,
+    wl: np.array,
+    wl2: np.array,
+    fwhm2: np.array,
+    fill: bool = False,
+    srf_file: str = None,
+    H: np.array = None,
+) -> np.array:
+    """Resample a spectrum to a new wavelength / FWHM.
+       Assumes Gaussian SRFs.
+
+    Args:
+        x: radiance vector
+        wl: sample starting wavelengths
+        wl2: wavelengths to resample to
+        fwhm2: full-width-half-max at resample resolution
+        fill: boolean indicating whether to fill in extrapolated regions
+        ### sc Adding for non-Gaussian SRF ###
+        srf_file: SRF for the sensor if not assuming Gaussian
+        H: pre-computed transformation matrix, to enable caching
+
+    Returns:
+        np.array: interpolated radiance vector
+
+    """
+    # sc including if else to add non-Gaussian SRF
+    # Probably a better way than this with file paths, etc.
+    if H is None:
+        H = calculate_resample_matrix(wl, wl2, fwhm2, srf_file)
 
     dims = len(x.shape)
     if fill:
@@ -638,7 +629,7 @@ def load_spectrum(spectrum_file: str) -> (np.array, np.array):
         spectrum = spectrum[:, :2]
         wavelengths, spectrum = spectrum.T
         if wavelengths[0] < 100:
-            wavelengths = wavelengths * 1000.0  # convert microns -> nm if needed
+            wavelengths = units.micron_to_nm(wavelengths)
         return spectrum, wavelengths
     else:
         return spectrum, None
@@ -729,7 +720,6 @@ def envi_header(inputpath):
         os.path.splitext(inputpath)[-1] == ".img"
         or os.path.splitext(inputpath)[-1] == ".dat"
         or os.path.splitext(inputpath)[-1] == ".raw"
-        or os.path.splitext(inputpath)[-1] == ".bin"
     ):
         # headers could be at either filename.img.hdr or filename.hdr.  Check both, return the one that exists if it
         # does, if not return the latter (new file creation presumed).
@@ -846,3 +836,41 @@ class Track:
 
             return True
         return False
+
+
+def compare(a, b, threshold=0.8, not_same=True):
+    """
+    Compares strings in `a` to strings in `b`
+
+    Parameters
+    ----------
+    a : str | list[str]
+        A string or list of strings to compare with `b`
+    a : str | list[str]
+        A string or list of strings to compare with `a`
+    threshold : float, default=0.8
+        Ratio threshold to meet to be considered matching. Must be between 0 and 1.
+    not_same : bool, default=True
+        Only include matches in which the two strings are not the same
+
+    Returns
+    -------
+    matching : dict
+        For each string in `a`, return a list of strings in `b` that meet the matching
+        threshold
+    """
+    if isinstance(a, str):
+        a = [a]
+
+    if isinstance(b, str):
+        b = [b]
+
+    matches = {}
+    for x in a:
+        for y in b:
+            if not_same and x == y:
+                continue
+            if SequenceMatcher(None, x, y).ratio() >= threshold:
+                matches.setdefault(x, []).append(y)
+
+    return matches

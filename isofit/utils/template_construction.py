@@ -1222,11 +1222,11 @@ def load_climatology(
         aerosol_lut = lut_params.get_grid(
             alr[0], alr[1], aerosol_lut_spacing[_a], aerosol_lut_spacing_mins[_a]
         )
-        aerosol_lut = None
+
         if aerosol_lut is not None:
             aerosol_state_vector["AERFRAC_{}".format(_a)] = {
                 "bounds": [float(alr[0]), float(alr[1])],
-                "scale": 0.01,
+                "scale": 1,
                 "init": float((alr[1] - alr[0]) / 10.0 + alr[0]),
                 "prior_sigma": 10.0,
                 "prior_mean": float((alr[1] - alr[0]) / 10.0 + alr[0]),
@@ -1234,8 +1234,6 @@ def load_climatology(
 
             aerosol_lut_grid["AERFRAC_{}".format(_a)] = aerosol_lut.tolist()
 
-    # NOTE: BW edit here
-    # instead of using "get_grid", if custom is true it just overwrites with what I have in the config..
     aot_550_lut = lut_params.get_grid(
         lut_params.aot_550_range[0],
         lut_params.aot_550_range[1],
@@ -1243,20 +1241,15 @@ def load_climatology(
         lut_params.aot_550_spacing_min,
     )
 
-    # if lut_params.custom_spacing is True:
-    #    aot_550_lut = lut_params.aot_550_actual
-
     if aot_550_lut is not None:
-        # aerosol_lut_grid["AOT550"] = aot_550_lut
         aerosol_lut_grid["AOT550"] = aot_550_lut.tolist()
         alr = [aerosol_lut_grid["AOT550"][0], aerosol_lut_grid["AOT550"][-1]]
         aerosol_state_vector["AOT550"] = {
             "bounds": [float(alr[0]), float(alr[1])],
-            # "bounds": [0.03, 0.6],
-            "scale": 1.0,
-            "init": 0.1001,
-            "prior_sigma": 100.0,
-            "prior_mean": float(0.1),
+            "scale": 1,
+            "init": float((alr[1] - alr[0]) / 10.0 + alr[0]),
+            "prior_sigma": 10.0,
+            "prior_mean": float((alr[1] - alr[0]) / 10.0 + alr[0]),
         }
 
     logging.info("Loading Climatology")
@@ -1303,6 +1296,9 @@ def load_climatology(
     )
 
     return aerosol_state_vector, aerosol_lut_grid, aerosol_model_path
+
+
+
 
 
 def calc_modtran_max_water(paths: Pathnames) -> float:

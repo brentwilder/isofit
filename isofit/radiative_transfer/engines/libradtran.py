@@ -27,8 +27,8 @@ import numpy as np
 from isofit.core.fileio import IO
 from isofit.core import common
 from isofit.data import env
+from isofit.core import units
 from isofit.core.common import (
-    units,
     json_load_ascii,
     calculate_resample_matrix,
     resample_spectrum,
@@ -110,6 +110,7 @@ LibRadTran directory not found: {self.libradtran}. Please use one of the followi
         self.lrt_bin_dir = self.libradtran / "bin"
 
         super().__init__(engine_config, **kwargs)
+        self.sim_path = Path(self.sim_path)
 
     def preSim(self):
 
@@ -205,6 +206,7 @@ LibRadTran directory not found: {self.libradtran}. Please use one of the followi
         cmd = self.rebuild_cmd(point, name)
 
         # Only execute when the .out file is missing (for now jsut checking first out)
+        self.sim_path = Path(self.sim_path)
         sim1_out = self.sim_path / f"{name}_sim1_alb-0.0.out"
         if sim1_out.exists():
             Logger.warning(f"libRadtran sim files already exist for point {point}")
@@ -442,6 +444,7 @@ LibRadTran directory not found: {self.libradtran}. Please use one of the followi
         ]
 
         files = []
+        self.sim_path = Path(self.sim_path)
 
         # create the 5 sim files
         for run in runs:

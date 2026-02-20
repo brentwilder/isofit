@@ -134,6 +134,12 @@ class Isofit:
         self.rows = range(rdn.n_rows)
         self.cols = range(rdn.n_cols)
 
+        import pandas as pd
+        pixel_df = pd.read_csv(f"/Users/bawilder/Code/mm1-alaska2/isofit_idx/ang20230407t215924_isofit_pixels.csv")
+        index_pairs = pixel_df[['row', 'col']].to_numpy(dtype=int)
+        self.rows = np.unique(index_pairs[:, 0])
+        self.cols = np.unique(index_pairs[:, 1])
+
         # Initialize files in __init__, otherwise workers fail
         IO.initialize_output_files(
             self.config, rdn.n_rows, rdn.n_cols, self.full_statevector
