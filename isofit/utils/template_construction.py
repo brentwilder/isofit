@@ -544,7 +544,7 @@ def build_presolve_config(
         spectra_per_inversion = 1
 
     if emulator_base is None:
-        engine_name = "modtran"
+        engine_name = "LibRadTran"
     elif emulator_base.endswith(".jld2"):
         engine_name = "KernelFlowsGP"
     else:
@@ -758,7 +758,7 @@ def build_main_config(
         lut_path = abspath(prebuilt_lut_path)
 
     if emulator_base is None:
-        engine_name = "modtran"
+        engine_name = "LibRadTran"
     elif emulator_base.endswith(".jld2"):
         engine_name = "KernelFlowsGP"
     else:

@@ -54,7 +54,7 @@ def apply_oe(
     surface_path,
     pixel_size,
     copy_input_files=False,
-    modtran_path=None,
+    modtran_path="/Users/bawilder/.isofit/libradtran/libRadtran-2.0.6",
     wavelength_path=None,
     surface_category="multicomponent_surface",
     aerosol_climatology_path=None,
@@ -604,10 +604,10 @@ def apply_oe(
             ihaze_type="AER_NONE",
         )
 
-        if emulator_base is None and prebuilt_lut is None:
-            max_water = tmpl.calc_modtran_max_water(paths)
-        else:
-            max_water = 6
+        #if emulator_base is None and prebuilt_lut is None:
+        #    max_water = tmpl.calc_modtran_max_water(paths)
+        #else:
+        max_water = 6
 
         # run H2O grid as necessary
         if not exists(envi_header(paths.h2o_subs_path)) or not exists(

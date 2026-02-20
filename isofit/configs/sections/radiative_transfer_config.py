@@ -103,6 +103,45 @@ class RadiativeTransferEngineConfig(BaseConfigSection):
         of the keys in radiative_transfer->statevector.  If not specified, uses all keys from
         radiative_transfer->statevector.  Auto-sorted (alphabetically) below."""
 
+        # libRadtran
+        self._reptran_band_model_type = str
+        self.reptran_band_model = "coarse"
+        """str: libRadtran-only band model. REPTRAN options are coarse (15cm-1), medium (5 cm-1), and fine (1 cm-1)."""
+
+        self._kb_alpha_1_type = float
+        self.kb_alpha_1 = None
+        """float: libRadtran-only King-Byrne Angstrom parameter (alpha 1). Setting to None uses default aerosol profile."""
+
+        self._kb_alpha_2_type = float
+        self.kb_alpha_2 = None
+        """float: libRadtran-only King-Byrne Angstrom parameter (alpha 2). Setting to None uses default aerosol profile."""
+
+        self._ssa_scale_type = float
+        self.ssa_scale = None
+        """float: libRadtran-only scaling of single scattering albedo from aerosol profile. Setting to None uses profile default."""
+
+        self._gg_set_type = float
+        self.gg_set = None
+        """float: libRadtran-only setting of constant asymmetry parameter to represent aerosols. Setting to None uses profile default."""
+
+        self._tau_file_type = str
+        self.tau_file = None
+        """str: libRadtran-only path to optical depth file that overwrites default profile."""
+
+        self._ssa_file_type = str
+        self.ssa_file = None
+        """str: libRadtran-only path to single scattering albedo file that overwrites default profile."""
+
+        self._gg_file_type = str
+        self.gg_file = None
+        """str: libRadtran-only path to asymmetry parameter file that overwrites default profile."""
+
+        self._moments_file_type = str
+        self.moments_file = None
+        """str: libRadtran-only path to phase function moments file. Uses custom phase function instead of default Henyey-Greenstein."""
+
+
+
         # MODTRAN parameters
         self._aerosol_template_file_type = str
         self.aerosol_template_file = None
