@@ -220,6 +220,7 @@ LibRadTran directory not found: {self.libradtran}. Please use one of the followi
                 Logger.error(call.stdout.decode())
 
     def readSim(self, point):
+        self.sim_path = Path(self.sim_path)
         name = self.point_to_filename(point)
         prefix = str(self.sim_path / name)
         a1, a2 = self.albedos[1], self.albedos[2]
