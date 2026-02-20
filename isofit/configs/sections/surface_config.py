@@ -34,8 +34,17 @@ class SurfaceConfig(BaseConfigSection):
         self._surface_file_type = str
         self.surface_file = None
 
+        self._multi_surface_flag_type = bool
+        self.multi_surface_flag = False
+
         self._surface_category_type = str
         self.surface_category = None
+
+        self._surface_class_file_type = str
+        self.surface_class_file = None
+
+        self._base_surface_class_file_type = str
+        self.base_surface_class_file = None
 
         self._wavelength_file_type = str
         self.wavelength_file = None

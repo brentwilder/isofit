@@ -352,7 +352,7 @@ class InputData:
 class IO:
     """..."""
 
-    def __init__(self, config: Config, forward: ForwardModel):
+    def __init__(self, config: Config, forward: ForwardModel, full_statevec: list = []):
         """Initialization specifies retrieval subwindows for calculating
         measurement cost distributions."""
 
@@ -373,6 +373,12 @@ class IO:
         self.n_sv = len(forward.statevec)
         self.n_chan = len(forward.instrument.wl_init)
         self.flush_rate = config.implementation.io_buffer_size
+
+        # Use the pre-defined full statevec
+        if len(full_statevec):
+            self.full_statevec = full_statevec
+        else:
+            self.full_statevec = forward.statevec
 
         self.simulation_mode = config.implementation.mode == "simulation"
 
@@ -940,6 +946,55 @@ class IO:
             row, col, to_write, states, flush_immediately=flush_immediately
         )
 
+
+    @staticmethod
+    def initialize_output_files(config, n_rows, n_cols, full_statevector):
+
+        q = np.loadtxt(config.forward_model.instrument.wavelength_file)
+        if q.shape[1] > 2:
+            q = q[:, 1:3]
+
+        wl_init, fwhm_init = q.T
+        wl_names = [("Channel %i" % i) for i in range(len(wl_init))]
+        bbl = "{" + ",".join([str(1) for n in range(len(wl_init))]) + "}"
+        engine_name = (
+            config.forward_model.radiative_transfer.radiative_transfer_engines[
+                0
+            ].engine_name
+        )
+
+        for element, element_header, element_name in zip(
+            *config.output.get_output_files()
+        ):
+            band_names, ztitle, zrange = element_header
+
+            if band_names == "statevector":
+                band_names = full_statevector
+            elif band_names == "wavelength":
+                band_names = wl_names
+            elif band_names == "atm_coeffs":
+                band_names = wl_names * 5
+            else:
+                band_names = "{}"
+
+            n_bands = len(band_names)
+            _ = SpectrumFile(
+                element,
+                write=True,
+                n_rows=n_rows,
+                n_cols=n_cols,
+                n_bands=n_bands,
+                interleave="bip",
+                dtype=np.float32,
+                wavelengths=wl_init,
+                fwhm=fwhm_init,
+                band_names=band_names,
+                bad_bands=bbl,
+                map_info="{}",
+                zrange=zrange,
+                ztitles=ztitle,
+            )
+
     @staticmethod
     def load_esd(file=None):
         """
@@ -1016,3 +1071,4 @@ def initialize_output(output_metadata, outpath, out_shape, **kwargs):
     del out_file
 
     return outpath
+

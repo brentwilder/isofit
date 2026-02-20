@@ -103,6 +103,14 @@ class RadiativeTransferEngineConfig(BaseConfigSection):
         of the keys in radiative_transfer->statevector.  If not specified, uses all keys from
         radiative_transfer->statevector.  Auto-sorted (alphabetically) below."""
 
+        self._lut_compression_type = str
+        self.lut_compression = "zlib"
+        """str: Compression method to use for the LUT NetCDF"""
+
+        self._lut_complevel_type = int
+        self.lut_complevel = None
+        """int: The compression level to use for the chosen method"""
+
         # libRadtran
         self._reptran_band_model_type = str
         self.reptran_band_model = "coarse"

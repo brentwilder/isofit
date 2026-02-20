@@ -739,9 +739,9 @@ def apply_oe(
             logging.info("`config_only` enabled, exiting early")
             return
 
-        logging.info("Running initial solve for rho_e and rho_terrain...")
-        bkg_heuristic_estimate(working_directory)
-        logging.info("Background calculations complete.")
+        #logging.info("Running initial solve for rho_e and rho_terrain...")
+        #bkg_heuristic_estimate(working_directory)
+        #logging.info("Background calculations complete.")
 
         # Run retrieval
         logging.info("Running ISOFIT with full LUT")

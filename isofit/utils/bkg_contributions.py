@@ -29,6 +29,19 @@ def bkg_heuristic_estimate(working_directory):
         center_c = cols[len(cols) // 2]
         center_data = io.get_components_at_index(center_r, center_c, bkg_solve=True)
 
+        if center_data is None:
+            for r in row_chunk:
+                for c in cols:
+                    center_data = io.get_components_at_index(r, c, bkg_solve=True)
+                    if center_data is not None:
+                        break
+                if center_data is not None:
+                    break
+
+        if center_data is None:
+            return row_chunk, rfl_chunk
+    
+
         # Simple inversion at center
         x_center = invert_simple(fm, center_data.meas, center_data.geom)
         _, _, x_instr = fm.unpack(fm.init.copy())

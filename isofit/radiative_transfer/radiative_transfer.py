@@ -221,7 +221,7 @@ class RadiativeTransfer:
 
         # Compute L_Slope (viewshed radiance). approx that L_tot is reasonable estimate for neighborhood.
         ct = max(0, ((1 + np.cos(np.radians(geom.slope))) / 2) - geom.svf)
-        L_slope = L_slope_down * ct * rho_terrain
+        L_slope = L_slope_down * ct * rho_terrain * (r["transm_up_dir"] + r["transm_up_dif"])
 
         # Thermal transmittance
         L_up = Ls * (r["transm_up_dir"] + r["transm_up_dif"])
