@@ -306,13 +306,13 @@ class RadiativeTransferEngineConfig(BaseConfigSection):
                         "Please download an updated version from:\n https://zenodo.org/records/10831425"
                     )
 
-                if self.emulator_file.endswith(".6c"):
-                    from isofit.radiative_transfer.engines.six_s import get_exe
-
-                    if "co2" not in get_exe(self.engine_base_dir, version=True):
-                        errors.append(
-                            "sRTMnet 6C requires a CO2 version of 6S. Please use the isofit download CLI to pull a CO2 tag: https://github.com/isofit/6S/tags"
-                        )
+           #     if self.emulator_file.endswith(".6c"):
+            #        from isofit.radiative_transfer.engines.six_s import get_exe
+#
+ #                   if "co2" not in get_exe(self.engine_base_dir, version=True):
+  #                      errors.append(
+   #                         "sRTMnet 6C requires a CO2 version of 6S. Please use the isofit download CLI to pull a CO2 tag: https://github.com/isofit/6S/tags"
+    #                    )
 
                 if self.emulator_aux_file is None:
                     # Fallback to the path specified by the isofit.ini

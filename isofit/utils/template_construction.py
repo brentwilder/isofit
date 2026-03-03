@@ -764,7 +764,7 @@ def build_config(
     )
 
     if emulator_base is None:
-        engine_name = "modtran"
+        engine_name = "LibRadTran"
     elif emulator_base.endswith(".jld2"):
         engine_name = "KernelFlowsGP"
     else:

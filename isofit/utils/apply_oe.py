@@ -74,7 +74,7 @@ def apply_oe(
     sensor,
     surface_path,
     copy_input_files=False,
-    modtran_path=None,
+    modtran_path="/Users/bawilder/.isofit/libradtran/libRadtran-2.0.6",
     wavelength_path=None,
     surface_category="multicomponent_surface",
     surface_class_file=None,
@@ -685,10 +685,10 @@ def apply_oe(
             ihaze_type="AER_NONE",
         )
 
-        if emulator_base is None and prebuilt_lut is None:
-            max_water = tmpl.calc_modtran_max_water(paths)
-        else:
-            max_water = 6
+        #if emulator_base is None and prebuilt_lut is None:
+        #    max_water = tmpl.calc_modtran_max_water(paths)
+        #else:
+        max_water = 6
 
         if use_superpixels:
             h2o_path = paths.h2o_subs_path
