@@ -108,9 +108,11 @@ def background_reflectance(
     MIN_RANGE = 0.2  # assumed min range [km]
 
     conf = configs.create_new_config(paths.h2o_config_path)
-    conf = update_config_for_surface(
-        conf, list(conf.forward_model.surface.Surfaces.keys())[0]
-    )
+
+    if not conf.forward_model.surface.surface_category:
+        conf = update_config_for_surface(
+            conf, list(conf.forward_model.surface.Surfaces.keys())[0]
+        )
 
     # For multi-surface, us
     fm = ForwardModel(conf)
