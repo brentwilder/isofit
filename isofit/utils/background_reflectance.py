@@ -18,16 +18,19 @@
 # Author: Philip G. Brodrick, philip.brodrick@jpl.nasa.gov
 #
 import logging
-import numpy as np
-from spectral.io import envi
-from scipy.ndimage import uniform_filter
 
-from isofit.core.common import envi_header
-from isofit.utils.algebraic_line import algebraic_line
-from isofit.core.forward import ForwardModel
+import numpy as np
+from scipy.ndimage import uniform_filter
+from spectral.io import envi
+
 from isofit.configs import configs
+from isofit.core.common import envi_header
 from isofit.core.fileio import initialize_output
+from isofit.core.forward import ForwardModel
+from isofit.core.multistate import update_config_for_surface
+from isofit.core.units import m_to_km
 from isofit.utils import extractions, reducers
+from isofit.utils.algebraic_line import algebraic_line
 
 
 def approx_pixel_size(loc, nodata_value=-9999):
@@ -105,13 +108,18 @@ def background_reflectance(
     MIN_RANGE = 0.2  # assumed min range [km]
 
     conf = configs.create_new_config(paths.h2o_config_path)
+    conf = update_config_for_surface(
+        conf, list(conf.forward_model.surface.Surfaces.keys())[0]
+    )
+
+    # For multi-surface, us
     fm = ForwardModel(conf)
     wl = fm.surface.wl
 
     # Estimate pixel size and adjacency range in km (pixel size is approx. based on loc file)
     loc = envi.open(envi_header(input_loc), input_loc).open_memmap()
     rows, cols, _ = loc.shape
-    pixel_size = approx_pixel_size(loc=loc, nodata_value=nodata_value) / 1000.0  # km
+    pixel_size = m_to_km(approx_pixel_size(loc=loc, nodata_value=nodata_value))
     adj_range = get_adjacency_range(
         sensor_alt_asl=mean_altitude_km,
         ground_alt_asl=mean_elevation_km,

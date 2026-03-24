@@ -250,7 +250,7 @@ def index_spectra_by_surface_view(config, index_pairs, force_full_res=False):
     return class_groups
 
 
-def update_config_for_surface(config, surface_class_str, clouds=True):
+def update_config_for_surface(config, surface_class_str):
     """
     This is the primary mechanism by which isofit changes its configuration
     across surface classifications. It will leverage the Surfaces dict,
