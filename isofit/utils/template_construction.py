@@ -707,6 +707,7 @@ def build_config(
     aerosol_model_file: str = None,
     aerosol_state_vector: dict = None,
     use_superpixels: bool = True,
+    use_background_rfl: bool = False,
     n_cores: int = -1,
     surface_category="multicomponent_surface",
     emulator_base: str = None,
@@ -858,6 +859,7 @@ def build_config(
                 surface_category=surface_category,
                 pressure_elevation=pressure_elevation,
                 use_superpixels=use_superpixels,
+                use_background_rfl=use_background_rfl,
             ),
         },
         "implementation": make_implementation_config(
@@ -1863,11 +1865,13 @@ def make_surface_config(
     surface_category="multicomponent_surface",
     pressure_elevation=False,
     use_superpixels=False,
+    use_background_rfl=False,
 ):
 
     # Initialize config dict
     surface_config_dict = {
         "multi_surface_flag": False,
+        "use_background_rfl": use_background_rfl,
     }
 
     # Check to see if a classification file is being propogated

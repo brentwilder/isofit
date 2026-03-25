@@ -29,8 +29,8 @@ from isofit.utils import (
     reducers,
     segment,
 )
-from isofit.utils.skyview import skyview
 from isofit.utils.background_reflectance import background_reflectance
+from isofit.utils.skyview import skyview
 
 EPS = 1e-6
 CHUNKSIZE = 256
@@ -659,6 +659,7 @@ def apply_oe(
         "paths": paths,
         "n_cores": n_cores,
         "use_superpixels": use_superpixels,
+        "use_background_rfl": use_background_rfl,
         "surface_category": surface_category,
         "emulator_base": emulator_base,
         "uncorrelated_radiometric_uncertainty": uncorrelated_radiometric_uncertainty,
