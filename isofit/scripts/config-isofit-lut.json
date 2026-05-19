@@ -2,7 +2,7 @@
 	"aot_550_range": [0.0001, 0.6002],
 	"aot_550_spacing": 0.2,
 	"h2o_range": [0.05, 2.006],
-	"h2o_spacing": 0.25,	
+	"h2o_spacing": 1.0,	
 	"elevation_spacing": 0.5,
 	"to_sensor_zenith_spacing": 10.0
 }

@@ -420,13 +420,16 @@ class RadiativeTransfer:
             # NOTE: BW HERE
             # update cos_i based on x_surface
             # solve for aspect via sin(aspect) and cos(aspect)
-            aspect = np.degrees(math.atan2(x_surface[0], x_surface[1]))
-            if (aspect < 0.0):
-                aspect += 360.0
-            aspect = np.radians(aspect)
-            cos_i = (np.sin(np.radians(geom.solar_zenith)) * np.sin(np.radians(geom.slope)) *
-                    np.cos(np.radians(geom.solar_azimuth) - aspect) +
-                    np.cos(np.radians(geom.solar_zenith)) * np.cos(np.radians(geom.slope)))
+            #aspect = np.degrees(math.atan2(x_surface[0], x_surface[1]))
+            #if (aspect < 0.0):
+            #    aspect += 360.0
+            #aspect = np.radians(aspect)
+            #cos_i = (np.sin(np.radians(geom.solar_zenith)) * np.sin(np.radians(geom.slope)) *
+            #        np.cos(np.radians(geom.solar_azimuth) - aspect) +
+            #        np.cos(np.radians(geom.solar_zenith)) * np.cos(np.radians(geom.slope)))
+            cos_i = x_surface[1]
+
+            
         else: # is IceSurface class
             cos_i = x_surface[0]
 
@@ -488,15 +491,20 @@ class RadiativeTransfer:
             #L_down_dir = L_dir_dir + L_dif_dir
             #L_down_dif = L_dif_dir + L_dif_dir
             L_slope_down, L_down_dir, L_down_dif = self.get_L_down_transmitted(x_RT, geom)
+            
             # correct downward for surface
             if len(x_surface) >10: # this is is SnowSurface 
-                aspect = np.degrees(math.atan2(x_surface[0], x_surface[1]))
-                if (aspect < 0.0):
-                    aspect += 360.0
-                aspect = np.radians(aspect)
-                cos_i = (np.sin(np.radians(geom.solar_zenith)) * np.sin(np.radians(geom.slope)) *
-                        np.cos(np.radians(geom.solar_azimuth) - aspect) +
-                        np.cos(np.radians(geom.solar_zenith)) * np.cos(np.radians(geom.slope)))
+
+                #aspect = np.degrees(math.atan2(x_surface[0], x_surface[1]))
+                #if (aspect < 0.0):
+                #    aspect += 360.0
+                #aspect = np.radians(aspect)
+                #cos_i = (np.sin(np.radians(geom.solar_zenith)) * np.sin(np.radians(geom.slope)) *
+                #        np.cos(np.radians(geom.solar_azimuth) - aspect) +
+                #        np.cos(np.radians(geom.solar_zenith)) * np.cos(np.radians(geom.slope)))
+
+                cos_i = x_surface[1]
+
             else: # is IceSurface class
                 cos_i = x_surface[0]
             cos_i = max(0., min(cos_i, 1.0)) 

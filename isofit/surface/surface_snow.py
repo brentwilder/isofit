@@ -41,6 +41,7 @@ class SnowSurface(MultiComponentSurface):
 
     Accurate background reflectances are assumed within the apply-oe pipeline of this branch. 
 
+
     """
 
     def __init__(self, full_config: Config):
@@ -48,7 +49,7 @@ class SnowSurface(MultiComponentSurface):
         super().__init__(full_config)
 
         # entire state vector
-        self.statevec_names = (['sinA','cosA', # topography (2)
+        self.statevec_names = (['empty','cos_i', # topography (2)
                                 'Grain_radius', 'Liquid_water', 'Dust', 'Algae', # snow properties (4)
                                 'z_snow', 'z_pv', 'z_npv', 'z_soil',  # pixel surface fractional covers (4)
                                 'veg_rank','npv_rank', 'soil_rank', #endmember parameters (3)
@@ -58,14 +59,14 @@ class SnowSurface(MultiComponentSurface):
                       1., 1., 1., 1.,
                       1., 1.,1.,
                       ]
-        self.init = [1.,-1.,
+        self.init = [1., 0.5,
                      500., 0., 0.,0., 
                      0., 0., 0., 0., 
                      0., 0., 0.,
                      ]
         self.bounds = np.array([
-            [-1.,1.],              # Sine aspect
-            [-1.,1.],              # Cosine aspect
+            [-1.,1.],              # Sine aspect (BLANK)
+            [0., 1.],              # Cosine aspect  (cos_i actually)
             [30., 1500.],          # grain radius
             [0., 25.],             # liquid water fraction
             [0.0, 4000.],          # dust concentration
@@ -84,6 +85,7 @@ class SnowSurface(MultiComponentSurface):
 
         self.x_fixed = None
 
+        # load DISORT data to Jouni's interp class
         # NOTE: need to make this path based on sensoorr
         config = full_config.forward_model.instrument
         if config.wavelength_file is not None:
@@ -100,6 +102,7 @@ class SnowSurface(MultiComponentSurface):
         if len(self.wl) == 299:
             disort_sensor = "APEX"
 
+        disort_sensor = "ENMAP"
         disort_path = env.path("data", f"disort_snow_lut_{disort_sensor}.nc")
         ds = xr.load_dataset(disort_path)
         grid = [
@@ -112,15 +115,17 @@ class SnowSurface(MultiComponentSurface):
             ds['lwc'].values,
         ]
 
-        # load DISORT data to Jouni's interp class.. two rfls and two albedos...
-        #self.g_hd = VectorInterpolator(grid_input=grid,data_input=ds['r_hd'].values,version="mlg")
-        #self.g_dd = VectorInterpolator(grid_input=grid,data_input=ds['r_dd'].values,version="mlg")
-        #self.g_ah = VectorInterpolator(grid_input=grid,data_input=ds['a_hd'].values,version="mlg")
-        #self.g_ad = VectorInterpolator(grid_input=grid,data_input=ds['a_dd'].values,version="mlg")
-        # just to work with older iteration of my DISORT LUT, to be removed soon...
-        self.g_hd = VectorInterpolator(grid_input=grid,data_input=ds['hdrf'].values,version="mlg")
-        self.g_dd = VectorInterpolator(grid_input=grid,data_input=ds['brdf'].values,version="mlg")
-        self.g_alb = VectorInterpolator(grid_input=grid,data_input=ds['a_diff'].values,version="mlg")
+        self.g_hdrf = VectorInterpolator(
+            grid_input=grid,
+            data_input=ds['hdrf'].values,
+            version="mlg"
+        )
+
+        self.g_brdf = VectorInterpolator(
+            grid_input=grid,
+            data_input=ds['brdf'].values,
+            version="mlg"
+        )
 
         # Load in Endmembers data
         with open(env.path("data", f"pv_{disort_sensor}.pkl"), 'rb') as f:
@@ -174,8 +179,8 @@ class SnowSurface(MultiComponentSurface):
             x_surface[1] = 1.0
         if x_surface[0] <= -1.0:
             x_surface[0] = -1.0
-        if x_surface[1] <= -1.0:
-            x_surface[1] = -1.0
+        if x_surface[1] <= 0.0:
+            x_surface[1] = 1e-6
         if x_surface[2] <= 30.0:
             x_surface[2] = 30.0
         if x_surface[2] >= 1500.0:
@@ -200,17 +205,23 @@ class SnowSurface(MultiComponentSurface):
         sza = geom.solar_zenith
         saa = geom.solar_azimuth
         slope = geom.slope
-        cosi, cosv = self.calc_new_angles(x_surface,
-                                          sza, vza, 
-                                          saa, vaa,
-                                          slope, geom)
+
+        # EnMAP hack / if want to fully go to cosi only not aspect.
+        cosv = np.cos(np.radians(vza))
+        cosi = x_surface[1]
+        cosi = max(0.06, min(cosi, 1.0)) 
+        
+        #cosi, cosv = self.calc_new_angles(x_surface,
+        #                                  sza, vza, 
+        #                                  saa, vaa,
+        #                                  slope, geom)
         
         # correct for RAA way DISORT is expecting it.
         disort_raa = 180 - raa
-        snow_dir_dir = self.g_dd(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+        snow_dir_dir = self.g_brdf(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
                                              disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
         
-        snow_dif_dir = self.g_hd(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
+        snow_dif_dir = self.g_hdrf(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
                                              disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
 
         # Endmembers
@@ -279,75 +290,6 @@ class SnowSurface(MultiComponentSurface):
         return cosi, cosv
 
 
-    def calc_snow_albedo(self, x_surface, geom, L_down_dir=None, L_down_dif=None):
-        """
-        Returns broadband snow albedos
-        """
-        # catch potential invalid values before LUT
-        if x_surface[0] >= 1.0:
-            x_surface[0] = 1.0
-        if x_surface[1] >= 1.0:
-            x_surface[1] = 1.0
-        if x_surface[0] <= -1.0:
-            x_surface[0] = -1.0
-        if x_surface[1] <= -1.0:
-            x_surface[1] = -1.0
-        if x_surface[2] <= 30.0:
-            x_surface[2] = 30.0
-        if x_surface[2] >= 1500.0:
-            x_surface[2] = 1500.0
-        if x_surface[3] >= 25.0:
-            x_surface[3] = 25.0
-        if x_surface[3] <= 0.0:
-            x_surface[3] = 0.0
-        if x_surface[4] >= 4000.0:
-            x_surface[4] = 4000.0
-        if x_surface[4] <= 0.0:
-            x_surface[4] = 0.0
-        if x_surface[5] >= 6e5:
-            x_surface[5] = 6e5
-        if x_surface[5] <= 0.0:
-            x_surface[5] = 0.0
-            
-        # calculate all relevant angles
-        vza = geom.observer_zenith
-        raa = geom.relative_azimuth
-        vaa = geom.observer_azimuth
-        sza = geom.solar_zenith
-        saa = geom.solar_azimuth
-        slope = geom.slope
-        cosi, cosv = self.calc_new_angles(x_surface,
-                                          sza, vza, 
-                                          saa, vaa,
-                                          slope, geom)
-        
-        # correct for RAA way DISORT is expecting it.
-        disort_raa = 180 - raa
-
-        # TODO
-        # temp try/except to work for both versions of the DISORT LUT, to be removed soon..
-        #a_dir = self.g_ad(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
-        #                                    disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
-        
-        #a_dif = self.g_ah(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
-        #                                    disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
-
-        # This is tmp until fully go to next DISORT version
-        a_dir = a_dif = self.g_alb(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)), 
-                                                disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
-
-        # Compute diffuse fraction
-        L_total = (L_down_dif+L_down_dir)
-        k = L_down_dif / (L_down_dif + L_down_dir + 1e-12)
-        alb_blue = (1-k)*a_dir + k*a_dif
-            
-        # integrate (numpy changed trapz it seems in 2.0?)
-        total_albedo = np.trapz(alb_blue * L_total, dx=1) / np.trapz(L_total + 1e-12, dx=1)
-        direct_albedo = np.trapz(a_dir * L_down_dir, dx=1) / np.trapz(L_down_dir + 1e-12, dx=1)
-        diffuse_albedo = np.trapz(a_dif * L_down_dif, dx=1) / np.trapz(L_down_dif + 1e-12, dx=1)
-        
-        return total_albedo, direct_albedo, diffuse_albedo
-
 
     def calc_lamb(self, x_surface, geom):
         """Lambertian reflectance."""
@@ -367,13 +309,15 @@ class SnowSurface(MultiComponentSurface):
         # first the radiance at the current state vector
         rho_dir, rho_dif = self.calc_rfl(x_surface, geom)
         svf = geom.svf
-        cosi,_ = self.calc_new_angles(x_surface, 
-                                      geom.solar_zenith, 
-                                      geom.observer_zenith,
-                                      geom.solar_azimuth, 
-                                      geom.observer_azimuth, geom.slope)
 
-        rdn = L_down_dir*rho_dir + L_down_dif*rho_dif
+        cosi=x_surface[1]
+        #cosi,_ = self.calc_new_angles(x_surface, 
+        #                                        geom.solar_zenith, 
+        #                                        geom.observer_zenith,
+        #                                        geom.solar_azimuth, 
+        #                                        geom.observer_azimuth, geom.slope)
+
+        rdn = L_down_dir*rho_dir*cosi + L_down_dif*rho_dif*svf
 
         # perturb each element of the surface state vector (finite difference)
         drdn_dsurface = []
@@ -384,14 +328,15 @@ class SnowSurface(MultiComponentSurface):
             rho_dir_p,rho_dif_p = self.calc_rfl(x_surface_perturb, geom)
 
             # get new angles
-            cosi_perturb,_ = self.calc_new_angles(x_surface_perturb, 
-                                                  geom.solar_zenith, 
-                                                  geom.observer_zenith,
-                                                  geom.solar_azimuth, 
-                                                  geom.observer_azimuth, geom.slope)
+            cosi_perturb = x_surface_perturb[1]
+            #cosi_perturb,_ = self.calc_new_angles(x_surface_perturb, 
+            #                                      geom.solar_zenith, 
+            #                                      geom.observer_zenith,
+            #                                      geom.solar_azimuth, 
+            #                                      geom.observer_azimuth, geom.slope)
 
-            rdn_perturb = ((rho_dir_p * L_down_dir / cosi * cosi_perturb) + 
-                           (rho_dif_p * L_down_dif))
+            rdn_perturb = ((rho_dir_p * L_down_dir * cosi_perturb) + 
+                           (rho_dif_p * L_down_dif * svf))
             
             drdn_dsurface.append((rdn_perturb - rdn) / eps)
 

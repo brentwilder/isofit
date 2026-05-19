@@ -1,0 +1,77 @@
+{
+    "output_model_file": "/store/bawilder/20260311_alex_prisma_val/PRS_20240704/surface_model.mat",
+    "wavelength_file": "/store/bawilder/20260311_alex_prisma_val/PRS_20240704/wave.txt",
+    "normalize":"Euclidean",
+    "reference_windows":[[400,1300],[1450,1700],[2100,2450]],
+    "sources":
+  [
+    {
+      "input_spectrum_files":
+        [
+          "/home/bawilder/.isofit/data/reflectance/surface_model_ucsb"
+        ],
+      "n_components": 8,
+      "windows": [
+        {
+          "interval":[300,890],
+          "regularizer":100,
+          "correlation":"decorrelated"
+        },
+        {
+          "interval":[890,990],
+          "regularizer":1e-6,
+          "correlation":"EM"
+        },
+        {
+          "interval":[990,1090],
+          "regularizer":100,
+          "correlation":"decorrelated"
+        },
+        {
+          "interval":[1090,1190],
+          "regularizer":1e-6,
+          "correlation":"EM"
+        },
+        {
+          "interval":[1190,2500],
+          "regularizer":100,
+          "correlation":"decorrelated"
+        }
+      ]
+    },
+    {
+      "input_spectrum_files":
+        [
+          "/home/bawilder/.isofit/data/reflectance/ocean_spectra_rev2"
+        ],
+      "n_components": 4,
+      "windows": [
+        {
+          "interval":[300,890],
+          "regularizer":100,
+          "correlation":"decorrelated"
+        },
+        {
+          "interval":[890,990],
+          "regularizer":1e-6,
+          "correlation":"EM"
+        },
+        {
+          "interval":[990,1090],
+          "regularizer":100,
+          "correlation":"decorrelated"
+        },
+        {
+          "interval":[1090,1190],
+          "regularizer":1e-6,
+          "correlation":"EM"
+        },
+        {
+          "interval":[1190,2500],
+          "regularizer":100,
+          "correlation":"decorrelated"
+        }
+      ]
+    }
+]
+}

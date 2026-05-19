@@ -572,6 +572,8 @@ class IO:
         if self.n_chan == 299:
             data_sensor = "APEX"
 
+        data_sensor="ENMAP"
+        
         # load endmember data
         # saved as tuple (mu, V)
         npv_file = env.path("data", f"npv_{data_sensor}.pkl")
