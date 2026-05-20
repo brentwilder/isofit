@@ -216,9 +216,6 @@ class Inversion:
         inverse covariance and its square root."""
         
         Seps = self.fm.Seps(x, meas, geom)
-        import matplotlib.pyplot as plt
-        plt.plot(meas)
-        plt.show()
         wn = len(self.winidx)
         Seps_win = np.zeros((wn, wn))
         for i in range(wn):
