@@ -792,10 +792,13 @@ class IO:
             if "posterior_uncertainty_file" in self.output_datasets:
                 S_hat, K, G = iv.calc_posterior(state_est, geom, meas)
                 U = np.sqrt(np.diag(S_hat))
-                asp_rad = math.atan2(U[0], U[1])
-                asp_deg = np.degrees(asp_rad)
-                U[0] = asp_rad # NOTE first one is aspect radians
-                U[1] = asp_deg # second is aspect degrees
+                
+                #asp_rad = math.atan2(U[0], U[1])
+                #asp_deg = np.degrees(asp_rad)
+                
+                #U[0] = asp_rad # NOTE first one is aspect radians
+                #U[1] = asp_deg # second is aspect degrees
+
                 uncert_out = np.append(U, geom.MAPE)    
                 to_write["posterior_uncertainty_file"] = uncert_out
                 # NOTE BW: aspect is scaled by atan2

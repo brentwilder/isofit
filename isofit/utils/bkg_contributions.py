@@ -51,23 +51,25 @@ def bkg_heuristic_estimate(working_directory):
                 obs_pixel = np.array(obs_mm[r, c, :], dtype=np.float32)
                 loc_pixel = np.array(loc_mm[r, c, :], dtype=np.float32)
                 
-                if np.any(meas_pixel < -49):
+                if meas_pixel[0] < -250.0 or np.isnan(meas_pixel[0]):
                     rfl_chunk[i, j, :] = np.nan
                     continue
 
-                local_geom = Geometry(esd=esd_reference, svf=1.0, obs=obs_pixel, loc=loc_pixel, slope=0.0)
-                
-                rfl_est, _, _ = invert_algebraic(
-                    surface=fm.surface,
-                    RT=fm.RT,
-                    instrument=fm.instrument,
-                    x_surface=x_surface,
-                    x_RT=x_RT,
-                    x_instrument=x_instrument,
-                    meas=meas_pixel,
-                    geom=local_geom
-                )
-                rfl_chunk[i, j, :] = rfl_est
+                else:
+                    local_geom = Geometry(esd=esd_reference, svf=1.0, obs=obs_pixel, loc=loc_pixel, slope=0.0)
+                    
+                    rfl_est, _, _ = invert_algebraic(
+                        surface=fm.surface,
+                        RT=fm.RT,
+                        instrument=fm.instrument,
+                        x_surface=x_surface,
+                        x_RT=x_RT,
+                        x_instrument=x_instrument,
+                        meas=meas_pixel,
+                        geom=local_geom
+                    )
+                    rfl_chunk[i, j, :] = rfl_est
+
 
         return row_chunk, rfl_chunk
 

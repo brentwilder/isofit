@@ -181,6 +181,12 @@ class Inversion:
         xa = self.fm.xa(x, geom)
         Sa = self.fm.Sa(x, geom)
 
+        if not np.all(meas) > -5.0 and not np.all(meas) < 300.0 or np.isnan(meas[0]) or meas[0] == 0.0:
+            S_hat = np.ones((len(xa), 1))
+            K = np.ones((len(xa), len(xa)))
+            G = np.ones((len(xa), len(xa)))
+            return S_hat, K, G
+
         # NOTE: this is also zero'd out for Sa inv
         #Sa_inv = svd_inv(Sa, hashtable=self.hashtable, max_hash_size=self.max_table_size)
         Sa_inv = 0
@@ -208,8 +214,11 @@ class Inversion:
         This depends on the location in the state space. This distribution is
         calculated over one or more subwindows of the spectrum. Return the
         inverse covariance and its square root."""
-
+        
         Seps = self.fm.Seps(x, meas, geom)
+        import matplotlib.pyplot as plt
+        plt.plot(meas)
+        plt.show()
         wn = len(self.winidx)
         Seps_win = np.zeros((wn, wn))
         for i in range(wn):
@@ -357,6 +366,9 @@ class Inversion:
         # Simulations are easy - return the initial state vector
         if self.mode == "simulation":
             self.fm.surface.rfl = meas
+            return np.array([self.fm.init.copy()])
+        
+        if not np.all(meas) > -5.0 and not np.all(meas) < 300.0 or np.isnan(meas[0]) or meas[0] == 0.0:
             return np.array([self.fm.init.copy()])
 
         if len(self.integration_grid.values()) == 0:

@@ -199,7 +199,7 @@ def invert_algebraic(
     # Surface and measured wavelengths may differ.
     Ls = surface.calc_Ls(x_surface, geom)
     Ls_meas = interp1d(surface.wl, Ls, fill_value="extrapolate")(wl)
-    rdn_solrfl = meas - (transup * Ls_meas)
+    rdn_solrfl = meas #- (transup * Ls_meas)
 
     # Now solve for the reflectance at measured wavelengths,
     # and back-translate to surface wavelengths
@@ -210,6 +210,7 @@ def invert_algebraic(
         rho = RT.rdn_to_rho(rdn_solrfl, coszen, solar_irr)
 
     rfl = 1.0 / (transm / (rho - rhoatm) + sphalb)
+    
     rfl[rfl > 1.0] = 1.0
     rfl_est = interp1d(wl, rfl, fill_value="extrapolate")(surface.wl)
 
