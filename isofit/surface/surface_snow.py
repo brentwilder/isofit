@@ -126,6 +126,12 @@ class SnowSurface(MultiComponentSurface):
             data_input=ds['brdf'].values,
             version="mlg"
         )
+        
+        self.g_alb = VectorInterpolator(
+            grid_input=grid, data_input=ds["a_diff"].values, version="mlg"
+        )
+
+
 
         # Load in Endmembers data
         with open(env.path("data", f"pv_{disort_sensor}.pkl"), 'rb') as f:
@@ -238,6 +244,96 @@ class SnowSurface(MultiComponentSurface):
 
 
         return rho_dir_dir, rho_dif_dir
+
+
+
+    def calc_snow_albedo(self, x_surface, geom, L_down_dir=None, L_down_dif=None):
+        """
+        Returns broadband snow albedos
+        """
+        # catch potential invalid values before LUT
+        if x_surface[0] >= 1.0:
+            x_surface[0] = 1.0
+        if x_surface[1] >= 1.0:
+            x_surface[1] = 1.0
+        if x_surface[0] <= -1.0:
+            x_surface[0] = -1.0
+        if x_surface[1] <= -1.0:
+            x_surface[1] = -1.0
+        if x_surface[2] <= 30.0:
+            x_surface[2] = 30.0
+        if x_surface[2] >= 1500.0:
+            x_surface[2] = 1500.0
+        if x_surface[3] >= 25.0:
+            x_surface[3] = 25.0
+        if x_surface[3] <= 0.0:
+            x_surface[3] = 0.0
+        if x_surface[4] >= 4000.0:
+            x_surface[4] = 4000.0
+        if x_surface[4] <= 0.0:
+            x_surface[4] = 0.0
+        if x_surface[5] >= 6e5:
+            x_surface[5] = 6e5
+        if x_surface[5] <= 0.0:
+            x_surface[5] = 0.0
+
+        # calculate all relevant angles
+        vza = geom.observer_zenith
+        raa = geom.relative_azimuth
+        vaa = geom.observer_azimuth
+        sza = geom.solar_zenith
+        saa = geom.solar_azimuth
+        slope = geom.slope
+
+        cosv = np.cos(np.radians(vza))
+        cosi = x_surface[1]
+        cosi = max(0.06, min(cosi, 1.0)) 
+        
+        #cosi, cosv = self.calc_new_angles(x_surface, sza, vza, saa, vaa, slope, geom)
+
+        # correct for RAA way DISORT is expecting it.
+        disort_raa = 180 - raa
+
+        # TODO
+        # temp try/except to work for both versions of the DISORT LUT, to be removed soon..
+        # a_dir = self.g_ad(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)),
+        #                                    disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
+
+        # a_dif = self.g_ah(np.array([np.degrees(np.arccos(cosi)), np.degrees(np.arccos(cosv)),
+        #                                    disort_raa, x_surface[2], x_surface[5], x_surface[4], x_surface[3]]))
+
+        # This is tmp until fully go to next DISORT version
+        a_dir = a_dif = self.g_alb(
+            np.array(
+                [
+                    np.degrees(np.arccos(cosi)),
+                    np.degrees(np.arccos(cosv)),
+                    disort_raa,
+                    x_surface[2],
+                    x_surface[5],
+                    x_surface[4],
+                    x_surface[3],
+                ]
+            )
+        )
+
+        # Compute diffuse fraction
+        L_total = L_down_dif + L_down_dir
+        k = L_down_dif / (L_down_dif + L_down_dir + 1e-12)
+        alb_blue = (1 - k) * a_dir + k * a_dif
+
+        # integrate (numpy changed trapz it seems in 2.0?)
+        total_albedo = np.trapezoid(alb_blue * L_total, dx=1) / np.trapezoid(
+            L_total + 1e-12, dx=1
+        )
+        direct_albedo = np.trapezoid(a_dir * L_down_dir, dx=1) / np.trapezoid(
+            L_down_dir + 1e-12, dx=1
+        )
+        diffuse_albedo = np.trapezoid(a_dif * L_down_dif, dx=1) / np.trapezoid(
+            L_down_dif + 1e-12, dx=1
+        )
+
+        return total_albedo, direct_albedo, diffuse_albedo
 
 
     def reconstruct_reflectance(self, x_surface, mu_V_tuple):

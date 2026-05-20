@@ -52,7 +52,7 @@ def bkg_heuristic_estimate(working_directory):
                 loc_pixel = np.array(loc_mm[r, c, :], dtype=np.float32)
                 
                 if meas_pixel[0] < -250.0 or np.isnan(meas_pixel[0]):
-                    rfl_chunk[i, j, :] = np.nan
+                    rfl_chunk[i, j, :] = 0.25
                     continue
 
                 else:
@@ -80,7 +80,7 @@ def bkg_heuristic_estimate(working_directory):
             r = max_r_px
             size = 2 * r + 1
             avg = uniform_filter(cube, size=(size, size, 1), mode='nearest')
-            return np.nan_to_num(avg, nan=0.25)
+            return avg
 
         radii_px = [int(round(r * max_r_px)) for r in radii_frac]
         weighted_avg = np.zeros_like(cube)
@@ -103,7 +103,7 @@ def bkg_heuristic_estimate(working_directory):
 
             weighted_avg += weights[i] * annulus_avg
 
-        return np.nan_to_num(weighted_avg, nan=0.25)
+        return weighted_avg
     
     config = configs.create_new_config(glob(os.path.join(working_directory, "config", "") + "*_isofit.json")[0])
     
@@ -137,6 +137,12 @@ def bkg_heuristic_estimate(working_directory):
         rho_e_future = calc_rho_e_ray.remote(rfl_cube, 1.0, pixel_size, radii_frac, weights, terrain=False)
         rho_terrain_future = calc_rho_e_ray.remote(rfl_cube, 0.5, pixel_size, terrain=True)
         rho_e, rho_terrain = ray.get([rho_e_future, rho_terrain_future])
+
+        rho_e = np.copy(rho_e)
+        rho_terrain = np.copy(rho_terrain)
+        rho_e[np.isnan(rho_e)] = 0.25
+        rho_terrain[np.isnan(rho_terrain)] = 0.25
+
 
         np.save(rho_e_path, rho_e.astype(np.float16))
         np.save(rho_terrain_path, rho_terrain.astype(np.float16))

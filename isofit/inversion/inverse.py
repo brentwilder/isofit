@@ -182,9 +182,9 @@ class Inversion:
         Sa = self.fm.Sa(x, geom)
 
         if not np.all(meas) > -5.0 and not np.all(meas) < 300.0 or np.isnan(meas[0]) or meas[0] == 0.0:
-            S_hat = np.ones((len(xa), 1))
-            K = np.ones((len(xa), len(xa)))
-            G = np.ones((len(xa), len(xa)))
+            S_hat = np.zeros((len(xa), len(xa)))
+            K = np.zeros((len(xa), len(xa)))
+            G = np.zeros((len(xa), len(xa)))
             return S_hat, K, G
 
         # NOTE: this is also zero'd out for Sa inv

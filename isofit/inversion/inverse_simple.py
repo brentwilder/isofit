@@ -210,7 +210,7 @@ def invert_algebraic(
         rho = RT.rdn_to_rho(rdn_solrfl, coszen, solar_irr)
 
     rfl = 1.0 / (transm / (rho - rhoatm) + sphalb)
-    
+
     rfl[rfl > 1.0] = 1.0
     rfl_est = interp1d(wl, rfl, fill_value="extrapolate")(surface.wl)
 
