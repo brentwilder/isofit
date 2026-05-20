@@ -323,13 +323,13 @@ class SnowSurface(MultiComponentSurface):
         alb_blue = (1 - k) * a_dir + k * a_dif
 
         # integrate (numpy changed trapz it seems in 2.0?)
-        total_albedo = np.trapezoid(alb_blue * L_total, dx=1) / np.trapezoid(
+        total_albedo = np.trapz(alb_blue * L_total, dx=1) / np.trapz(
             L_total + 1e-12, dx=1
         )
-        direct_albedo = np.trapezoid(a_dir * L_down_dir, dx=1) / np.trapezoid(
+        direct_albedo = np.trapz(a_dir * L_down_dir, dx=1) / np.trapz(
             L_down_dir + 1e-12, dx=1
         )
-        diffuse_albedo = np.trapezoid(a_dif * L_down_dif, dx=1) / np.trapezoid(
+        diffuse_albedo = np.trapz(a_dif * L_down_dif, dx=1) / np.trapz(
             L_down_dif + 1e-12, dx=1
         )
 
