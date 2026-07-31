@@ -164,6 +164,15 @@ class LUTSurface(Surface):
         # NOTE LUTSurface currently is not compatible with analytical line
         self.analytical_iv_idx = np.arange(self.n_state)
 
+        if self.use_background_rfl:
+            self.drdn_drfl = self.drdn_drfl_heterogeneous_bkg
+        else:
+            self.drdn_drfl = self.drdn_drfl_homogeneous_bkg
+
+    def update_heuristic_prior_means(self, x_surface, geom):
+        """Don't update any of the priors. Return xa"""
+        return self.xa(x_surface, geom)
+
     def xa(self, x_surface, geom):
         """Mean of prior distribution."""
 
@@ -285,10 +294,18 @@ class LUTSurface(Surface):
 
         return dlamb
 
-    def drdn_drfl(self, L_tot, s_alb, rho_dif_dir):
+    def drdn_drfl_heterogeneous_bkg(
+        self, L_tot, s_alb, rho_dif_dir, L_dir_dir, L_dir_dif, L_dif_dir, L_dif_dif
+    ):
         """Partial derivative of radiance with respect to
-        surface reflectance"""
+        surface reflectance, treating dir-dif and dif-dif as constants."""
+        return L_dir_dir + (L_dif_dir / (1.0 - s_alb * rho_dif_dir))
 
+    def drdn_drfl_homogeneous_bkg(
+        self, L_tot, s_alb, rho_dif_dir, L_dir_dir, L_dir_dif, L_dif_dir, L_dif_dif
+    ):
+        """Partial derivative of radiance with respect to
+        surface reflectance (dir-dir = dif-dir = dir-dif = dif-dif)."""
         return L_tot / ((1.0 - s_alb * rho_dif_dir) ** 2)
 
     def calc_Ls(self, x_surface, geom):
@@ -329,7 +346,15 @@ class LUTSurface(Surface):
         drdn_dLs = t_total_up
 
         drdn_dsurface = np.zeros(drfl_dsurface.shape)
-        drdn_drfl = self.drdn_drfl(L_tot, s_alb, rho_dif_dir)
+        drdn_drfl = self.drdn_drfl(
+            L_tot,
+            s_alb,
+            rho_dif_dir,
+            L_dir_dir=L_dir_dir,
+            L_dir_dif=L_dir_dif,
+            L_dif_dir=L_dif_dir,
+            L_dif_dif=L_dif_dif,
+        )
 
         # Construct the output matrix:
         # Dimensions should be (len(RT.wl), len(x_surface))
@@ -345,9 +370,9 @@ class LUTSurface(Surface):
 
     def analytical_model(
         self,
-        background,
         L_tot,
         geom,
+        s_alb=None,
         L_dir_dir=None,
         L_dir_dif=None,
         L_dif_dir=None,

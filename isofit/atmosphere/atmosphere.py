@@ -31,7 +31,7 @@ import numpy as np
 
 from isofit.configs import Config
 from isofit.core import common, units
-from isofit.core.common import svd_inv_sqrt
+from isofit.core.common import json_load_ascii, svd_inv_sqrt
 from isofit.core.geometry import Geometry
 from isofit.luts.reader import Reader
 
@@ -131,6 +131,11 @@ class BaseAtmosphere(Reader):
         self.lut_names = list(self.lut_grid)
         self.statevec_names = self.config.statevector.get_element_names()
 
+        possible_h2o_names = ["H2OSTR", "h2o"]
+        self.h2o_i = [
+            i for i, v in enumerate(self.statevec_names) if v in possible_h2o_names
+        ]
+
         # Configure and exit flag
         self.configure_and_exit = self.config.configure_and_exit
 
@@ -208,6 +213,32 @@ class BaseAtmosphere(Reader):
             self.Sa_normalized
         )
 
+        # Day of year of the scene this run targets, read from the template IDAY.
+        # When not specified, use the MODTRAN default (93)
+        # Used both to tag a LUT at build time and to reconcile a
+        # prebuilt LUT's build date against the current scene date.
+        self.dayofyear = None
+        if self.config.template_file:
+            modtran_input = json_load_ascii(self.config.template_file)["MODTRAN"][0][
+                "MODTRANINPUT"
+            ]
+            self.atmosphere_type = modtran_input["ATMOSPHERE"].get(
+                "M1", "ATM_MIDLAT_SUMMER"
+            )
+            iday = modtran_input.get("GEOMETRY", {}).get("IDAY")
+            self.dayofyear = int(iday) if iday is not None else None
+        else:
+            Logger.warning(
+                "No template file provided, assuming atm profile: ATM_MIDLAT_SUMMER and"
+                "default IDAY 93"
+            )
+            self.atmosphere_type = "ATM_MIDLAT_SUMMER"
+            self.dayofyear = 93
+
+        self.h2o_bounds_polynomial = modtran_water_upperbound_polynomials()[
+            self.atmosphere_type
+        ]
+
         # Uncertainty
         self.bvec = self.config.unknowns.get_element_names()
         self.bval = np.array([x for x in self.config.unknowns.get_elements()[0]])
@@ -222,7 +253,37 @@ class BaseAtmosphere(Reader):
             **kwargs,
         )
 
+        self.set_esd_correction()
+
         self.get_indices()
+
+    def set_esd_correction(self):
+        """Set esd_correction factor onto self. Presumes that there is only one
+        ESD per scene being processed.
+        """
+        self.esd_correction = 1.0
+
+        lut_doy = self.lut.attrs.get("dayofyear")
+
+        # Double check to make sure we have everything we need
+        if lut_doy is None:
+            Logger.warning(
+                "LUT has no 'dayofyear' attribute; setting to default of 93, "
+                "which is the MODTRAN default reference."
+            )
+            lut_doy = 93
+
+        lut_doy = int(lut_doy)
+        if lut_doy == self.dayofyear:
+            return
+
+        esd = common.load_esd()
+        self.esd_correction = (esd[lut_doy - 1, 1] / esd[self.dayofyear - 1, 1]) ** 2
+        Logger.info(
+            f"Applying Earth Sun Distance correction to LUT radiances: "
+            f"LUT day of year={lut_doy}, current day of year={self.dayofyear}, "
+            f"factor={self.esd_correction:.6f}"
+        )
 
     def lut_postprocess(self):
         """
@@ -292,8 +353,16 @@ class BaseAtmosphere(Reader):
             Logger.error(error)
             raise AttributeError(error)
 
-    def xa(self):
-        """Pull the priors from each of the individual RTs."""
+    def update_heuristic_prior_means(self, x_atmosphere, geom):
+        xa = self.prior_mean.copy()
+        xa[self.h2o_i] = x_atmosphere[self.h2o_i]
+
+        return xa
+
+    def xa(self, x_atmosphere, geom):
+        """
+        Use the image-wide prior mean
+        """
         return self.prior_mean
 
     def Sa(self):
@@ -344,7 +413,7 @@ class BaseAtmosphere(Reader):
         else:
             rho_atm = r["rhoatm"]
             L_atm = units.transm_to_rdn(rho_atm, geom.coszen, self.solar_irr)
-        return L_atm
+        return L_atm * self.esd_correction
 
     def get_upward_transm(self, r: dict, geom: Geometry, max_transm: float = 1.05):
         """
@@ -558,3 +627,80 @@ class BaseAtmosphere(Reader):
         """
         pairs = zip(self.lut_names, x_RT)
         return " ".join([f"{name}={val:5.3f}" for name, val in pairs])
+
+
+def modtran_water_upperbound_polynomials() -> dict:
+    """Polynomials as a function of ground altitude (km) to estimate upperbound of water column vapor (g/cm2). Generated from MODTRAN.
+
+    Returns:
+        dict: 3rd degree polynomials to estimate upperbound of water column vapor
+    """
+
+    # Capping polynomial to not allow negative, or increasing trend, at very high ground altitudes (>6km).
+    min_value = 0.25
+
+    polynomials = {
+        "ATM_TROPICAL": lambda x: np.maximum(
+            6.74256 + (-2.37052 * x) + (0.313829 * x**2) + (-0.0159003 * x**3),
+            min_value,
+        ),
+        "ATM_MIDLAT_SUMMER": lambda x: np.maximum(
+            5.350046 + (-1.839548 * x) + (2.296582e-01 * x**2) + (-1.020594e-02 * x**3),
+            min_value,
+        ),
+        "ATM_MIDLAT_WINTER": lambda x: np.maximum(
+            1.371226 + (-0.442087 * x) + (4.485325e-02 * x**2) + (-1.130163e-03 * x**3),
+            min_value,
+        ),
+        "ATM_SUBARC_SUMMER": lambda x: np.maximum(
+            3.121272 + (-1.171145 * x) + (1.704094e-01 * x**2) + (-9.701062e-03 * x**3),
+            min_value,
+        ),
+        "ATM_SUBARC_WINTER": lambda x: np.maximum(
+            0.630406 + (-0.176336 * x) + (8.286409e-03 * x**2) + (8.138824e-04 * x**3),
+            min_value,
+        ),
+        "ATM_US_STANDARD_1976": lambda x: np.maximum(
+            2.869655 + (-1.227473 * x) + (2.039059e-01 * x**2) + (-1.274801e-02 * x**3),
+            min_value,
+        ),
+    }
+
+    return polynomials
+
+
+def modtran_aot_lowerbound_polynomials() -> dict:
+    """Polynomials as a function of ground altitude (km) to estimate lowerbound of AOT at 550nm. Generated from MODTRAN.
+
+    Returns:
+        dict: 3rd degree polynomials to estimate lowerbound of AOT
+    """
+
+    polynomials = {
+        "ATM_TROPICAL": lambda x: 0.042090
+        + (-0.003120 * x)
+        + (4.462979e-18 * x**2)
+        + (-4.260469e-19 * x**3),
+        "ATM_MIDLAT_SUMMER": lambda x: 0.042090
+        + (-0.003120 * x)
+        + (4.462979e-18 * x**2)
+        + (-4.260469e-19 * x**3),
+        "ATM_MIDLAT_WINTER": lambda x: 0.024748
+        + (-0.001654 * x)
+        + (-5.083805e-07 * x**2)
+        + (7.252007e-08 * x**3),
+        "ATM_SUBARC_SUMMER": lambda x: 0.042090
+        + (-0.003120 * x)
+        + (4.462979e-18 * x**2)
+        + (-4.260469e-19 * x**3),
+        "ATM_SUBARC_WINTER": lambda x: 0.024748
+        + (-0.001654 * x)
+        + (-5.083805e-07 * x**2)
+        + (7.252007e-08 * x**3),
+        "ATM_US_STANDARD_1976": lambda x: 0.042090
+        + (-0.003120 * x)
+        + (4.462979e-18 * x**2)
+        + (-4.260469e-19 * x**3),
+    }
+
+    return polynomials
