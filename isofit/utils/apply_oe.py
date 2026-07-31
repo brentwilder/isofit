@@ -314,7 +314,7 @@ def apply_oe(
                 "If num_neighbors has multiple elements, only --analytical_line is valid"
             )
 
-    if surface_category == "lut_surface" and use_superpixels:
+    if surface_category == "lut_surface" and (analytical_line or empirical_line):
         raise ValueError(
             "Analytical line method does not work for LUT surface at this time."
         )
