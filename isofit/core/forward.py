@@ -335,7 +335,7 @@ class ForwardModel:
             L_dif_dir,
             L_dir_dif,
             L_dif_dif,
-        ) = self.calc_atmosphere_quantities(x_atmosphere, geom, rho_dif_dif_hi)
+        ) = self.calc_atmosphere_quantities(x_atmosphere, geom, rho_dif_dif_hi, x_surface)
 
         # Call surface emission, upsample
         Ls_hi = self.upsample(self.surface.wl, self.calc_Ls(x_surface, geom))
@@ -361,7 +361,7 @@ class ForwardModel:
         ) + self.eof_offset(x_instrument)
 
     def calc_atmosphere_quantities(
-        self, x_atmosphere: np.ndarray, geom: Geometry, rho_dif_dif: np.ndarray = 0
+        self, x_atmosphere: np.ndarray, geom: Geometry, rho_dif_dif: np.ndarray = 0, x_surface=[],
     ):
         """Retrieves the atmosphere quantities including the LUT sample (r),
         and the radiances (L). This function handles the hand-off between
@@ -398,7 +398,7 @@ class ForwardModel:
         if self.atmosphere.multipart_transmittance:
             # Get directional radiances
             L_tot, L_dir_dir, L_dif_dir, L_dir_dif, L_dif_dif = self.get_L_coupled(
-                r, geom, rho_dif_dif=rho_dif_dif
+                r, geom, rho_dif_dif=rho_dif_dif, x_surface=x_surface
             )
         else:
             if self.atmosphere.rt_mode == "rdn":
@@ -425,7 +425,7 @@ class ForwardModel:
             L_dif_dif * self.atmosphere.esd_correction,
         )
 
-    def get_L_coupled(self, r: dict, geom: Geometry, rho_dif_dif: np.ndarray = 0):
+    def get_L_coupled(self, r: dict, geom: Geometry, rho_dif_dif: np.ndarray = 0, x_surface=[]):
         """Get the interpolated radiance terms on the sun-to-surface-to-sensor path.
         These follow the physics as presented in Guanter (2006), Vermote et al. (1997), and Tanre et al. (1983).
 
@@ -465,9 +465,13 @@ class ForwardModel:
         cos_i_bg = geom.coszen
         skyview_factor_bg = 1.0
 
+        # BW 
+        # Update cosi from x surface
+        cos_i = x_surface[self.surface.cos_i_idx]
+
         # Assigning coupled terms, unscaling and rescaling downward direct radiance by local solar zenith angle.
         # Downward diffuse components are scaled by viewable sky fraction (i.e., "ungula" of viewable sky in solid geometry terms).
-        L_dir_dir = L_coupled[0] / geom.coszen * geom.cos_i * b
+        L_dir_dir = L_coupled[0] / geom.coszen * cos_i * b
         L_dir_dif = L_coupled[2] / geom.coszen * cos_i_bg
 
         # Note - we should really be doing the multiplication upstream before convolution - L_dif_dir and L_dif_dif terms are
@@ -475,7 +479,7 @@ class ForwardModel:
         # Correct downward diffuse term for topographic assuming Hay's model (Hay 1979; Richter 1998; Guanter et al., 2009)
         t_down_dir = r["transm_down_dir"]
         L_dif_dir = L_coupled[1] * (
-            (b * t_down_dir * (geom.cos_i / geom.coszen))
+            (b * t_down_dir * (cos_i/ geom.coszen))
             + ((1 - b * t_down_dir) * geom.skyview_factor)
         )
         L_dif_dif = L_coupled[3] * (
@@ -682,7 +686,7 @@ class ForwardModel:
             L_dif_dir,
             L_dir_dif,
             L_dif_dif,
-        ) = self.calc_atmosphere_quantities(x_atmosphere, geom, rho_dif_dif_hi)
+        ) = self.calc_atmosphere_quantities(x_atmosphere, geom, rho_dif_dif_hi, x_surface)
 
         # Call surface emission, upsample
         Ls_hi = self.upsample(self.surface.wl, self.calc_Ls(x_surface, geom))
@@ -724,6 +728,7 @@ class ForwardModel:
             rho_dif_dif=rho_dif_dif_hi,
             Ls=Ls_hi,
             rdn=rdn,
+            x_surface=x_surface
         )
 
         # To get the derivative w.r.t. Surface
@@ -794,7 +799,7 @@ class ForwardModel:
             L_dif_dir,
             L_dir_dif,
             L_dif_dif,
-        ) = self.calc_atmosphere_quantities(x_atmosphere, geom, rho_dif_dif_hi)
+        ) = self.calc_atmosphere_quantities(x_atmosphere, geom, rho_dif_dif_hi, x_surface)
 
         # Call surface emission, upsample
         Ls_hi = self.upsample(self.surface.wl, self.calc_Ls(x_surface, geom))
@@ -824,6 +829,7 @@ class ForwardModel:
             rho_dif_dif=rho_dif_dif_hi,
             Ls=Ls_hi,
             rdn=rdn,
+            x_surface=x_surface
         )
 
         # To get derivatives w.r.t. instrument, downsample to instrument wavelengths
@@ -850,6 +856,7 @@ class ForwardModel:
         rho_dif_dif,
         Ls,
         rdn,
+        x_surface
     ):
         """Derivative of estimated radiance w.r.t. atmosphere statevector elements.
         We use a numerical approach to approximate datmosphere with a constant surface
@@ -869,7 +876,7 @@ class ForwardModel:
                 L_dif_dir,
                 L_dir_dif,
                 L_dif_dif,
-            ) = self.calc_atmosphere_quantities(x_atmosphere_perturb, geom, rho_dif_dif)
+            ) = self.calc_atmosphere_quantities(x_atmosphere_perturb, geom, rho_dif_dif, x_surface)
 
             # Surface state is held constant?
             rdne = self.calc_rdn(
@@ -903,6 +910,7 @@ class ForwardModel:
         rho_dif_dif,
         Ls,
         rdn,
+        x_surface
     ):
         """Derivative of estimated rdn w.r.t. H2O_ABSCO
 
@@ -942,7 +950,7 @@ class ForwardModel:
                         L_dir_dif,
                         L_dif_dif,
                     ) = self.calc_atmosphere_quantities(
-                        x_atmosphere_perturb, geom, rho_dif_dif
+                        x_atmosphere_perturb, geom, rho_dif_dif, x_surface
                     )
 
                     rdne = self.calc_rdn(

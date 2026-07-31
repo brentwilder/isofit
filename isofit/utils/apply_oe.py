@@ -113,7 +113,7 @@ def apply_oe(
     retrieve_co2=False,
     use_background_rfl=False,
     eof_path=None,
-    terrain_style="dem",
+    terrain_style="solved",
     per_pixel_heuristic_prior=False,
 ):
     """
@@ -1031,7 +1031,7 @@ def apply_oe(
 @click.option("--retrieve_co2", is_flag=True, default=False)
 @click.option("--use_background_rfl", is_flag=True, default=False)
 @click.option("--eof_path", default=None)
-@click.option("--terrain_style", default="dem", type=click.Choice(["dem", "flat"]))
+@click.option("--terrain_style", default="solved", type=click.Choice(["dem", "flat", "solved"]))
 @click.option("--per_pixel_heuristic_prior", is_flag=True, default=False)
 @click.option(
     "--debug-args",

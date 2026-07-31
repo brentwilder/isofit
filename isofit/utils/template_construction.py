@@ -725,8 +725,8 @@ def build_config(
     surface_mapping: dict = None,
     retrieve_co2: bool = False,
     presolve: bool = False,
-    terrain_style: str = "flat",
-    max_slope: float = 20.0,
+    terrain_style: str = "solved",
+    max_slope: float = 200.0,
     per_pixel_heuristic_prior: bool = False,
     use_background_rfl: bool = False,
 ) -> None:
@@ -1809,8 +1809,8 @@ def make_surface_config(
     surface_working_paths: dict = None,
     surface_category: str = "multicomponent_surface",
     use_superpixels: bool = False,
-    terrain_style: str = "flat",
-    max_slope: float = 20.0,
+    terrain_style: str = "solved",
+    max_slope: float = 200.0,
     surface_refractive_index_path: str = None,
     use_background_rfl=False,
 ):

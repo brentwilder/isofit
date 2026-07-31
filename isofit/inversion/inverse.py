@@ -169,33 +169,23 @@ class Inversion:
         """Calculate posterior distribution of state vector. This depends
         both on the location in the state space and the radiance (via noise)."""
 
-        xa = self.fm.xa(x, geom)
-        Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa(x, geom)
-        K = self.fm.K(x, geom)
-        Seps = self.fm.Seps(x, meas, geom)
+        Sa_inv = 0
 
+        K = geom.total_jac
+
+        Seps = self.fm.Seps(x, meas, geom)
+        Seps = Seps[np.ix_(self.winidx, self.winidx)]
         Seps_inv = svd_inv(
             Seps, hashtable=self.hashtable, max_hash_size=self.max_table_size
         )
 
-        # Gain matrix G reflects current state, so we use the state-dependent
-        # Jacobian matrix K
-        S_hat = svd_inv(
-            K.T.dot(Seps_inv).dot(K) + Sa_inv,
-            hashtable=self.hashtable,
-            max_hash_size=self.max_table_size,
-        )
+        #import pdb
+        #pdb.set_trace()
+        S_hat = np.linalg.pinv(K.T @ K) # TODO: testing with just 2pooint jac of fwd model
+        #S_hat = np.linalg.pinv(K.T.dot(Seps_inv).dot(K) + Sa_inv)   
+
         G = S_hat.dot(K.T).dot(Seps_inv)
 
-        # N. Cressie [ASA 2018] suggests an alternate definition of S_hat for
-        # more statistically-consistent posterior confidence estimation
-        if self.state_indep_S_hat:
-            Ka = self.fm.K(xa, geom)
-            S_hat = svd_inv(
-                Ka.T.dot(Seps_inv).dot(Ka) + Sa_inv,
-                hashtable=self.hashtable,
-                max_hash_size=self.max_table_size,
-            )
         return S_hat, K, G
 
     def calc_Seps(self, x, meas, geom):
@@ -324,37 +314,16 @@ class Inversion:
             trajectory = []
 
             # Calculate the initial solution, if needed.
-            x0 = invert_simple(self.fm, meas, geom)
-
-            # Update regions outside retrieval windows to match priors
-            if self.config.priors_in_initial_guess and not self.fm.is_lut_surface:
-                prior_subset_idx = np.arange(len(x0))[self.fm.idx_surf_rfl][
-                    self.outside_ret_windows
-                ]
-                x0[prior_subset_idx] = self.fm.surface.xa(x0, geom)[prior_subset_idx]
-
-            trajectory.append(x0)
+            x0 = self.fm.init
 
             x0 = x0[self.inds_free]
 
-            # Could avoid this if-else and always save values to geom, just
-            # don't use them in cases where --per_pixel_heuristic_prior = False
-            if self.per_pixel_heuristic_prior:
-                # Set bounds - Should high geom directly
-                bounds = self.fm.heuristic_bounds(geom)
-                self.least_squares_params["bounds"] = bounds
-            else:
-                bounds = self.fm.bounds
-
-            x0 = self.fm.clip_bounds(x0, bounds, inds_free=self.inds_free, eps=eps)
+       
 
             # Find the full state vector with bounds checked
             x = self.full_statevector(x0)
 
-            # Heuristic prior means are based on initial guess
-            # Saving here will inherit the bounds check that comes before it.
-            if self.per_pixel_heuristic_prior:
-                self.fm.update_heuristic_prior_means(x, geom)
+ 
 
             # Regardless of anything we did for the heuristic guess, bring the
             # static preseed back into play (only does anything if inds_preseed
@@ -391,7 +360,10 @@ class Inversion:
 
             # Initialize and invert
             try:
-                xopt = least_squares(err, x0, jac=jac, **self.least_squares_params)
+                #xopt = least_squares(err, x0, jac=jac, **self.least_squares_params)
+                xopt = least_squares(err, x0, jac="2-point", **self.least_squares_params)
+                geom.total_jac = xopt.jac[:len(self.winidx), :]
+
                 x_full_solution = self.full_statevector(xopt.x)
                 trajectory.append(x_full_solution)
                 solutions.append(trajectory)

@@ -109,8 +109,9 @@ class Geometry:
         # In the more common case that Isofit config is provided...
         else:
             # Update terrain parameters from config
-            self.max_slope = full_config.forward_model.surface.max_slope
-            self.terrain_style = full_config.forward_model.surface.terrain_style
+            # BW Hardcoded here for snow surface model
+            self.max_slope = 200.0
+            self.terrain_style = "solved"
             self.lut_grid = full_config.forward_model.atmosphere.lut_grid
 
             # 1. If user has a lut grid that contains solar_zenith this takes priority
