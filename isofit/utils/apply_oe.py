@@ -317,6 +317,7 @@ def apply_oe(
     if surface_category == "lut_surface" and use_superpixels:
         raise ValueError(
             "Analytical line method does not work for LUT surface at this time."
+        )
 
     if use_background_rfl and not multipart_transmittance:
         raise ValueError(

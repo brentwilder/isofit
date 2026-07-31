@@ -27,7 +27,7 @@ from isofit.core.multistate import SurfaceMapping
 from isofit.data import env
 from isofit.luts.reader import inspect_lut_dimensions
 from isofit.utils.surface_model import surface_model
-from isofit.luts.reader import load_prebuilt_surface
+from isofit.surface.surface_lut import load_prebuilt_surface
 
 
 class Pathnames:
@@ -1928,7 +1928,6 @@ def make_surface_config(
         surface_config_dict["refractive_index_path"] = str(
             env.path("data", "h2o_real_refractive_index.txt")
         )
-
 
     return surface_config_dict
 
