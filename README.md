@@ -4,5 +4,5 @@
 
 - Least squares uses 2-point method , skips custom Jac
 
-- COS_I is always set to be solved
+- `COS_I` is always set to be solved, and is fully hooked up between surface and atmosphere RT.
 
