@@ -467,7 +467,10 @@ class ForwardModel:
 
         # BW 
         # Update cosi from x surface
-        cos_i = x_surface[self.surface.cos_i_idx]
+        try:
+            cos_i = x_surface[self.surface.cos_i_idx]
+        except: #BG CASE
+            cos_i = geom.cos_i
 
         # Assigning coupled terms, unscaling and rescaling downward direct radiance by local solar zenith angle.
         # Downward diffuse components are scaled by viewable sky fraction (i.e., "ungula" of viewable sky in solid geometry terms).
