@@ -256,7 +256,7 @@ def apply_oe(
     retrieve_co2 : bool, default=False
         Flag to retrieve CO2 in the state vector. Only available with emulator at the moment.
     use_background_rfl : bool, default=False
-        Flag to calculate background reflectance based on presolve. Presolve must also be turned on.
+        Flag to calculate background reflectance based on presolve. Presolve must be True or prebuilt_lut must be used.
     eof_path : str, default=None
         Add 1 or 2 Empirical Orthogonal Functions to the state vector.  File is a 1-2 column text file
         with one number per instrument channel.
@@ -451,9 +451,16 @@ def apply_oe(
     logging.info("...file/directory setup complete")
 
     remove_bgrfl_file = False
-    if use_background_rfl and not presolve and not exists(paths.bgrfl_working_path):
+
+    if prebuilt_lut is not None and use_background_rfl:
+        presolve = True
+        logging.info(
+            "Presolve has been overriden to True to simulate r0 to solve for adjacency effects"
+        )
+
+    if use_background_rfl and not exists(paths.bgrfl_working_path) and not presolve:
         raise ValueError(
-            "Background reflectance can only be computed if presolve is turned on."
+            "Background reflectance can only be computed if presolve is turned on or prebuilt_lut is provided."
         )
 
     # Based on the sensor type, get appropriate year/month/day info from initial condition.
