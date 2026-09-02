@@ -802,13 +802,11 @@ def build_config(
             posterior_output_path = None
             rfl_output_path = None
             bgrfl_input_path = None
-            bgtopo_path = None
         else:
             state_output_path = paths.state_working_path
             posterior_output_path = paths.uncert_working_path
             rfl_output_path = paths.rfl_working_path
             bgrfl_input_path = paths.bgrfl_working_path
-            bgtopo_path = (bgtopo_input_path,)
 
     input_config = make_input_config(
         rdn_input_path=rdn_input_path,
