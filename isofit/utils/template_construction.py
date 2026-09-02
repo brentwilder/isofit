@@ -471,10 +471,10 @@ class LUTConfig:
 
         # Units of AOD
         modtran_min_aerosol = modtran_aot_lowerbound_polynomials()[atmosphere_type](0)
-        self.aerosol_0_range = [modtran_min_aerosol, 0.2]
-        self.aerosol_1_range = [modtran_min_aerosol, 0.2]
-        self.aerosol_2_range = [modtran_min_aerosol, 0.2]
-        self.aot_550_range = [modtran_min_aerosol, 0.2]
+        self.aerosol_0_range = [modtran_min_aerosol, 0.6]
+        self.aerosol_1_range = [modtran_min_aerosol, 0.6]
+        self.aerosol_2_range = [modtran_min_aerosol, 0.6]
+        self.aot_550_range = [modtran_min_aerosol, 0.6]
 
         self.aot_550_spacing = 0
         self.aot_550_spacing_min = 0
@@ -1107,9 +1107,9 @@ def load_climatology(
             aerosol_state_vector["AERFRAC_{}".format(_a)] = {
                 "bounds": [float(alr[0]), float(alr[1])],
                 "scale": 1,
-                "init": float(init_value),
+                "init": 0.05,
                 "prior_sigma": 0.1,
-                "prior_mean": float(init_value),
+                "prior_mean": 0.05,
             }
 
             aerosol_lut_grid["AERFRAC_{}".format(_a)] = aerosol_lut.tolist()
@@ -1124,13 +1124,12 @@ def load_climatology(
     if aot_550_lut is not None:
         aerosol_lut_grid["AOT550"] = aot_550_lut.tolist()
         alr = [aerosol_lut_grid["AOT550"][0], aerosol_lut_grid["AOT550"][-1]]
-        init_value = get_aerosol_initial_value(alr[0], alr[1])
         aerosol_state_vector["AOT550"] = {
             "bounds": [float(alr[0]), float(alr[1])],
             "scale": 1,
-            "init": float(init_value),
+            "init": 0.05,
             "prior_sigma": 0.1,
-            "prior_mean": float(init_value),
+            "prior_mean": 0.05,
         }
 
     logging.info("Loading Climatology")

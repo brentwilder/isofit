@@ -22,11 +22,14 @@ from __future__ import annotations
 import logging
 import numpy as np
 import xarray as xr
+import pickle
 
 from isofit.core.common import svd_inv_sqrt, eps
 from isofit.surface.surface import Surface
 from isofit.core.units import micron_to_nm
 from isofit.core.common import VectorInterpolator
+from isofit.data import env
+
 
 
 # Local keys for loading in prebuilt-LUT
@@ -167,6 +170,10 @@ class LUTSurface(Surface):
                     for n in self.endmember_names
                 ]
             )
+        # Stash dynamic indices for low-rank parameters
+        self.idx_pv_lr = self.statevec_names.index("PV_LOWRANK") if "PV_LOWRANK" in self.statevec_names else None
+        self.idx_npv_lr = self.statevec_names.index("NPV_LOWRANK") if "NPV_LOWRANK" in self.statevec_names else None
+        self.idx_soil_lr = self.statevec_names.index("SOIL_LOWRANK") if "SOIL_LOWRANK" in self.statevec_names else None
 
         # Then, assign the priors and optimizaton parameters from the surface config
         self.init, self.bounds, self.scale, self.mean, self.sigma = [], [], [], [], []
@@ -199,6 +206,27 @@ class LUTSurface(Surface):
             self.drdn_drfl = self.drdn_drfl_heterogeneous_bkg
         else:
             self.drdn_drfl = self.drdn_drfl_homogeneous_bkg
+
+        # BW 
+        # Specific to isosnow (Snow surface model)
+        # We go with a set of low-rank models (1param) for each em (pv, npv, soil)
+        # This allows it to shift slightly but not too much
+        # Specifically for this is that algae is less likely to be used to absorb in the 
+        # vis for bad fit of PV. It will fluctuate this term instead.
+
+        if len(self.wl) == 425:
+            disort_sensor = "ANG"
+        if len(self.wl) == 285:
+            disort_sensor = "EMIT"
+
+        with open(env.path("data", f"pv_{disort_sensor}.pkl"), 'rb') as f:
+            self.pv = pickle.load(f)
+        with open(env.path("data", f"npv_{disort_sensor}.pkl"), 'rb') as f:
+            self.npv = pickle.load(f)       
+        with open(env.path("data", f"soil_{disort_sensor}.pkl"), 'rb') as f:
+            self.soil = pickle.load(f)    
+
+
 
     def update_heuristic_prior_means(self, x_surface, geom):
         """Don't update any of the priors. Return xa"""
@@ -256,9 +284,17 @@ class LUTSurface(Surface):
         # Apply softmax for fractional components
         f = self.softmax(np.array(x_surface[self.idx_em_rfls]))
 
-        # Apply linear mixture
-        rho_dir_dir = rho_dir_dir * f[0] + np.dot(self.endmember_matrix, f[1:])
-        rho_dif_dir = rho_dif_dir * f[0] + np.dot(self.endmember_matrix, f[1:])
+        # Reconstruct dynamic endmembers using cached indices
+        rho_pv = self.reconstruct_reflectance(np.array([x_surface[self.idx_pv_lr]]), self.pv)
+        rho_npv = self.reconstruct_reflectance(np.array([x_surface[self.idx_npv_lr]]), self.npv)
+        rho_soil = self.reconstruct_reflectance(np.array([x_surface[self.idx_soil_lr]]), self.soil)
+
+        # Stack dynamically reconstructed endmembers into a matrix
+        dynamic_endmember_matrix = np.column_stack([rho_pv, rho_npv, rho_soil])
+
+        # Apply linear mixture with dynamic endmembers
+        rho_dir_dir = rho_dir_dir * f[0] + np.dot(dynamic_endmember_matrix, f[1:])
+        rho_dif_dir = rho_dif_dir * f[0] + np.dot(dynamic_endmember_matrix, f[1:])
 
         return rho_dir_dir, rho_dif_dir
 
@@ -266,6 +302,21 @@ class LUTSurface(Surface):
         """Lambertian reflectance."""
         _, rho_dif = self.calc_rfl(x_surface, geom)
         return rho_dif
+
+    def reconstruct_reflectance(self, x_surface, mu_V_tuple):
+        """
+        TODO
+        """
+        mu=mu_V_tuple[0]
+        V=mu_V_tuple[1]
+        rfl = V.T @ x_surface + mu
+        rfl[rfl<0] = 0.01
+
+        if np.isnan(rfl).any():
+            rfl = np.full_like(rfl, fill_value=200.0)
+
+        return rfl
+
 
     def get_point(self, x_surface, geom):
         """create point in grid prior to VectorInterpolator."""
@@ -541,6 +592,11 @@ def load_prebuilt_surface(
         "scale": [[]],
     }
 
+    # BW LOWRANK
+    for lr_name in ["PV_LOWRANK", "NPV_LOWRANK", "SOIL_LOWRANK"]:
+        if lr_name not in statevec_names:
+            statevec_names.append(lr_name)
+
     for name in statevec_names:
 
         idx = lut_names.index(name) if name in lut_names else None
@@ -555,10 +611,15 @@ def load_prebuilt_surface(
             init = 0.0
             lb, ub = -5.0, 5.0
 
-        # TODO cos_i as a free parameter is not yet supported but could revist this
+        #BW cosi is brought in fully
         elif name == "COS_I":
             lb, ub = 1e-6, 1.0
             init = (lb + ub) / 2.0
+
+        # BW LOWRANK
+        elif name in ["PV_LOWRANK", "NPV_LOWRANK", "SOIL_LOWRANK"]:
+            init = 0.0
+            lb, ub = -3.0, 3.0
 
         lut_statevector_data["statevec_names"].append(name)
         lut_statevector_data["bounds"].append([lb, ub])
