@@ -179,10 +179,12 @@ class Inversion:
             Seps, hashtable=self.hashtable, max_hash_size=self.max_table_size
         )
 
-        #import pdb
-        #pdb.set_trace()
-        S_hat = np.linalg.pinv(K.T @ K) # TODO: testing with just 2pooint jac of fwd model
-        #S_hat = np.linalg.pinv(K.T.dot(Seps_inv).dot(K) + Sa_inv)   
+        # import pdb
+        # pdb.set_trace()
+        S_hat = np.linalg.pinv(
+            K.T @ K
+        )  # TODO: testing with just 2pooint jac of fwd model
+        # S_hat = np.linalg.pinv(K.T.dot(Seps_inv).dot(K) + Sa_inv)
 
         G = S_hat.dot(K.T).dot(Seps_inv)
 
@@ -318,12 +320,8 @@ class Inversion:
 
             x0 = x0[self.inds_free]
 
-       
-
             # Find the full state vector with bounds checked
             x = self.full_statevector(x0)
-
- 
 
             # Regardless of anything we did for the heuristic guess, bring the
             # static preseed back into play (only does anything if inds_preseed
@@ -360,9 +358,11 @@ class Inversion:
 
             # Initialize and invert
             try:
-                #xopt = least_squares(err, x0, jac=jac, **self.least_squares_params)
-                xopt = least_squares(err, x0, jac="2-point", **self.least_squares_params)
-                geom.total_jac = xopt.jac[:len(self.winidx), :]
+                # xopt = least_squares(err, x0, jac=jac, **self.least_squares_params)
+                xopt = least_squares(
+                    err, x0, jac="2-point", **self.least_squares_params
+                )
+                geom.total_jac = xopt.jac[: len(self.winidx), :]
 
                 x_full_solution = self.full_statevector(xopt.x)
                 trajectory.append(x_full_solution)

@@ -144,6 +144,13 @@ class Pathnames:
             self.bgrfl_working_path = None
             self.atm_presolve = None
 
+        self.bgtopo_working_path = abspath(
+            join(self.data_directory, self.fid + "_bgtopo")
+        )
+        self.bgtopo_subs_path = abspath(
+            join(self.input_data_directory, self.fid + "_subs_bgtopo")
+        )
+
         if copy_input_files is True:
             self.radiance_working_path = abspath(
                 join(self.input_data_directory, rdn_fname)
@@ -769,6 +776,7 @@ def build_config(
         loc_input_path = paths.loc_subs_path
         obs_input_path = paths.obs_subs_path
         svf_input_path = paths.svf_subs_path
+        bgtopo_input_path = paths.bgtopo_subs_path
 
         if presolve:
             state_output_path = paths.h2o_subs_path
@@ -787,17 +795,20 @@ def build_config(
         loc_input_path = paths.loc_working_path
         obs_input_path = paths.obs_working_path
         svf_input_path = paths.svf_working_path
+        bgtopo_input_path = paths.bgtopo_working_path
 
         if presolve:
             state_output_path = paths.h2o_working_path
             posterior_output_path = None
             rfl_output_path = None
             bgrfl_input_path = None
+            bgtopo_path = None
         else:
             state_output_path = paths.state_working_path
             posterior_output_path = paths.uncert_working_path
             rfl_output_path = paths.rfl_working_path
             bgrfl_input_path = paths.bgrfl_working_path
+            bgtopo_path = (bgtopo_input_path,)
 
     input_config = make_input_config(
         rdn_input_path=rdn_input_path,
@@ -806,6 +817,7 @@ def build_config(
         svf_input_path=svf_input_path,
         rdn_factors_path=paths.rdn_factors_path,
         bgrfl_path=bgrfl_input_path,
+        bgtopo_path=bgtopo_input_path,
     )
     output_config = make_output_config(
         state_output_path=state_output_path,
@@ -2010,6 +2022,7 @@ def make_input_config(
     svf_input_path: str = None,
     rdn_factors_path: str = None,
     bgrfl_path: str = None,
+    bgtopo_path: str = None,
 ):
     input_config = {}
     input_config["measured_radiance_file"] = rdn_input_path
@@ -2021,6 +2034,8 @@ def make_input_config(
         input_config["radiometry_correction_file"] = rdn_factors_path
     if bgrfl_path:
         input_config["background_reflectance_file"] = bgrfl_path
+    if bgtopo_path:
+        input_config["background_topography_file"] = bgtopo_path
 
     return input_config
 

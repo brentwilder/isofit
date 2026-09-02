@@ -256,10 +256,10 @@ class Worker(object):
         # Define coszen for geom creation
         self.coszen = fm.atmosphere.coszen
 
-        #self.rfl_bounds = np.min(fm.bounds, axis=0)[0], np.max(fm.bounds, axis=0)[1]
-        #logging.debug(
+        # self.rfl_bounds = np.min(fm.bounds, axis=0)[0], np.max(fm.bounds, axis=0)[1]
+        # logging.debug(
         #    f"Reflectance output will be bounded to the surface bounds: {self.rfl_bounds}"
-        #)
+        # )
 
         self.completed_spectra = 0
         self.hash_table = OrderedDict()
