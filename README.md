@@ -1,11 +1,18 @@
 # ISOSNOW - ISOFIT Snow Surface Model
 
+
 ## Overview
 
 - This diverges from ISOFIT dev branch on around 31 July 2026
 
 - Plan to bring in major updates from future ISOFIT PRs as needed (shown in change log)
 
+
+## Usage
+
+- See `./isofit_scripts`
+
+- The low-rank model files for PV, NPV, and Soil are in the `isosnow_data` folder and must be copied over into the home `~/.isofit/data` directory prior to running.
 
 ## Change log
 
@@ -17,8 +24,6 @@
 
 
 ## Other (maybe) helpful notes
-
-- The low-rank model files for PV, NPV, and Soil are in the `isosnow_data` folder and must be copied over into the home `~/.isofit/data` directory prior to running.
 
 - Least squares uses 2-point method , skips custom Jac that ISOFIT has implemented.
 
