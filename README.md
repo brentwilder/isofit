@@ -10,7 +10,7 @@
 
 ## Usage
 
-- See `./isofit_scripts`
+- See `./isosnow_scripts/`
 
 - The low-rank model files for PV, NPV, and Soil are in the `isosnow_data` folder and must be copied over into the home `~/.isofit/data` directory prior to running.
 
