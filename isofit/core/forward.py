@@ -32,7 +32,7 @@ from isofit.core.common import eps
 from isofit.core.geometry import Geometry
 from isofit.core.instrument import Instrument
 from isofit.core.multistate import match_statevector
-from isofit.core.units import transm_to_rdn
+from isofit.core.units import transm_to_rdn, rdn_to_transm
 from isofit.surface import Surface
 
 Logger = logging.getLogger(__file__)
@@ -430,6 +430,20 @@ class ForwardModel:
             L_dir_dif * self.atmosphere.esd_correction,
             L_dif_dif * self.atmosphere.esd_correction,
         )
+
+    def get_ndsi_toa(self, meas, geom):
+        """For use in skipping pixels that are not snow covered."""
+        # NOTE can placed into isofit.py
+        # TOA NDSI threshold to reduce computation
+        #NDSI_THRESHOLD = 0.85
+        #ndsi_toa = self.fm.get_ndsi_toa(input_data.meas, input_data.geom)
+        #if ndsi_toa < NDSI_THRESHOLD:
+        #    continue
+
+        toa_rfl = rdn_to_transm(meas, geom.coszen, self.atmosphere.solar_irr)
+        green_band = toa_rfl[abs(self.surface.wl - 550).argmin()]
+        swir_band = toa_rfl[abs(self.surface.wl - 1640).argmin()]
+        return (green_band - swir_band) / (green_band + swir_band + 1e-8)
 
     def get_L_coupled(
         self, r: dict, geom: Geometry, rho_dif_dif: np.ndarray = 0, x_surface=[]
