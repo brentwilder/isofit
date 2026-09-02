@@ -1,6 +1,6 @@
 # ISOSNOW - ISOFIT Snow Surface Model
 
-- With fixed PV shape, we must be careful with algae concentration and should be mindful of the priors. I have included here the surface.json that I use.
+- The low-rank model files for PV, NPV, and Soil are in the `isosnow_data` folder and must be copied over into the home `./.isofit/data` directory prior to running.
 
 - Least squares uses 2-point method , skips custom Jac
 
