@@ -32,6 +32,7 @@ from isofit.utils import (
 )
 from isofit.utils.skyview import skyview
 from isofit.utils.adjacency import process_background_data
+from isofit.utils.create_outputs import snow_model_outputs
 
 EPS = 1e-6
 CHUNKSIZE = 256
@@ -115,6 +116,8 @@ def apply_oe(
     eof_path=None,
     terrain_style="solved",
     per_pixel_heuristic_prior=False,
+    veg_fraction_file=None,
+    albedo_lut=None,
 ):
     """
     Applies OE over a flightline using an atmospheric radiative transfer engine. This executes
@@ -987,6 +990,7 @@ def apply_oe(
             if os.path.exists(f):
                 os.remove(f)
 
+    snow_model_outputs(input_loc, paths, veg_fraction_file, albedo_lut, mean_to_sensor_zenith)
     logging.info("Done.")
     ray.shutdown()
 
@@ -1040,6 +1044,8 @@ def apply_oe(
 @click.option("--retrieve_co2", is_flag=True, default=False)
 @click.option("--use_background_rfl", is_flag=True, default=False)
 @click.option("--eof_path", default=None)
+@click.option("--veg_fraction_file", default=None)
+@click.option("--albedo_lut", default=None)
 @click.option(
     "--terrain_style", default="solved", type=click.Choice(["dem", "flat", "solved"])
 )
