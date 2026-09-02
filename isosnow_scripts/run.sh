@@ -24,7 +24,7 @@ ATMOS="ATM_MIDLAT_WINTER"
 SURFACE_CONFIG_DIR="/Users/bawilder/Code/isofit-PRs/isosnow_scripts/surfacelut.json"
 
 # Output directory. Will be created if it doesn't exist.
-OUTPUT_DIR="/Users/bawilder/Code/isofit-PRs/local/test/20260828_snowmodel"
+OUTPUT_DIR="/Users/bawilder/Code/isofit-PRs/local/test/20260902_snowmodel"
 
 #LUT_CONFIG="/Users/bawilder/Code/isofit-PRs/local/config-isofit-lut.json"
 
@@ -34,10 +34,13 @@ LOGGING="INFO"
 # SKYVIEW
 SKYVIEW="/Users/bawilder/Code/sister/output/test2/clip/sky_view_factor"
 
+LUT="/Users/bawilder/Code/isofit-PRs/local/test/20260828_snowmodel/lut_full/lut.zarr"
+
 # Run iso
 isofit apply_oe "${rdn_file}" "${loc_file}" "${obs_file}" "${OUTPUT_DIR}" "${SENSOR}" \
   --surface_path="${SURFACE_CONFIG_DIR}" \
   --wavelength_path="${wavelength_file}" \
+  --prebuilt_lut="${LUT}" \
   --emulator_base="${EMULATOR_PATH}" \
   --n_cores=${n_cores} \
   --atmosphere_type="${ATMOS}" \
@@ -46,3 +49,4 @@ isofit apply_oe "${rdn_file}" "${loc_file}" "${obs_file}" "${OUTPUT_DIR}" "${SEN
   --use_background_rfl \
   --skyview_factor="${SKYVIEW}" \
   --presolve
+

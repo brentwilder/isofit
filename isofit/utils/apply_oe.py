@@ -902,7 +902,7 @@ def apply_oe(
                     logging_level=logging_level,
                     log_file=log_file,
                     chunksize=CHUNKSIZE,
-                    use_slic_rfls=True,
+                    use_slic_rfls=use_slic_rfls,
                     use_superpixels=use_superpixels,
                     nodata_value=-9999,
                     terrain_style="dem",
