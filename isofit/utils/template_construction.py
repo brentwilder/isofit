@@ -471,10 +471,10 @@ class LUTConfig:
 
         # Units of AOD
         modtran_min_aerosol = modtran_aot_lowerbound_polynomials()[atmosphere_type](0)
-        self.aerosol_0_range = [modtran_min_aerosol, 1]
-        self.aerosol_1_range = [modtran_min_aerosol, 1]
-        self.aerosol_2_range = [modtran_min_aerosol, 1]
-        self.aot_550_range = [modtran_min_aerosol, 1]
+        self.aerosol_0_range = [modtran_min_aerosol, 0.2]
+        self.aerosol_1_range = [modtran_min_aerosol, 0.2]
+        self.aerosol_2_range = [modtran_min_aerosol, 0.2]
+        self.aot_550_range = [modtran_min_aerosol, 0.2]
 
         self.aot_550_spacing = 0
         self.aot_550_spacing_min = 0
@@ -1104,7 +1104,6 @@ def load_climatology(
         )
 
         if aerosol_lut is not None:
-            init_value = get_aerosol_initial_value(alr[0], alr[1])
             aerosol_state_vector["AERFRAC_{}".format(_a)] = {
                 "bounds": [float(alr[0]), float(alr[1])],
                 "scale": 1,
