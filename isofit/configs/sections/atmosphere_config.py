@@ -158,6 +158,12 @@ class AtmosphereConfig(BaseConfigSection):
         self.emulator_file = None
         """str: Path to emulator model file"""
 
+        self._use_tp7_type = bool
+        self.use_tp7 = True  # BW NOTE snow model is using tp7 when running modtran
+        """str: Override to True to use TP7 outputs. 
+        The default is to create CHN outputs.  
+        Only implemented for MODTRAN."""
+
         self._emulator_aux_file_type = str
         self.emulator_aux_file = None
         """str: path to emulator auxiliary data - expected npz format"""

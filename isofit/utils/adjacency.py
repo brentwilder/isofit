@@ -127,7 +127,7 @@ def process_background_data(
     logging_level,
     log_file,
     chunksize,
-    use_slic_rfls=False, # NOTE
+    use_slic_rfls=False,  # NOTE
     use_superpixels=True,
     nodata_value=-9999,
     terrain_style="solved",
@@ -166,7 +166,7 @@ def process_background_data(
     del loc
 
     # Calls algebraic line using presolve config
-    # BW EDIT 
+    # BW EDIT
     use_slic_rfls = False
     if not use_slic_rfls:
         algebraic_line(
