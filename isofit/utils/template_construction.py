@@ -1896,6 +1896,7 @@ def make_surface_config(
                 "statevector", {}
             )
             for i, name in enumerate(statevec_names):
+                name = name.strip()
                 surface_config_dict["statevector"][name] = {
                     "bounds": [i for i in surface_mat["bounds"][i]],
                     "init": surface_mat["init"][0][i],
@@ -1922,6 +1923,7 @@ def make_surface_config(
             )
             lut_data = lut_params["lut_statevector_data"]
             for i, name in enumerate(lut_data["statevec_names"]):
+                name = name.strip()
                 if name not in surface_config_dict["statevector"]:
                     surface_config_dict["statevector"][name] = {
                         "bounds": [float(b) for b in lut_data["bounds"][i]],

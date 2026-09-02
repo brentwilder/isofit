@@ -209,6 +209,7 @@ class SurfaceConfig(BaseConfigSection):
         for f in mat_files:
             model_dict = loadmat(f)
             for i, name in enumerate(model_dict.get("statevec_names", [])):
+                name = name.strip()
                 for key in DefaultState._fields:
                     if len(model_dict.get("statevec_names", [])) == 1:
                         if not (np.all(statevec[name][key] == model_dict[key][i])):
