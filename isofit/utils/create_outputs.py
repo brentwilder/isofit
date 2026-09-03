@@ -70,7 +70,7 @@ def snow_model_outputs(
     outpath = abspath(join(paths.output_directory, rdn_fname.replace("_rdn", "_snow")))
     outpath_uncert = abspath(join(paths.output_directory, rdn_fname.replace("_rdn", "_snow_uncert")))
 
-    # Initialize the outputs and open them
+    # Initialize the outputs
     _ = initialize_output(
         output_metadata={
             "data type": 4,
@@ -105,7 +105,7 @@ def snow_model_outputs(
         description="DISORT derived snow surface properties fit to TOA radiance uncertainty",
     )
 
-    # Load Albedo LUT for per-pixel interpolation
+    # Load Albedo LUT 
     ds = xr.load_dataset(albedo_lut)
     grid = [
         ds["aot"].values,
@@ -114,6 +114,7 @@ def snow_model_outputs(
         ds["grain_radius"].values,
         ds["algae_conc"].values,
         ds["dust_conc"].values,
+        ds["lwc"].values,
         ds["toa_sza"].values,
         ds["cosi"].values,
         ds["svf"].values,
@@ -132,6 +133,7 @@ def snow_model_outputs(
             ds["da_total_dgrain"].values,
             ds["da_total_dalgae"].values,
             ds["da_total_ddust"].values,
+            ds["da_total_dlwc"].values,
             ds["da_total_dcosi"].values,
             ds["da_total_dsvf"].values,
             # Direct derivatives
@@ -140,6 +142,7 @@ def snow_model_outputs(
             ds["da_direct_dgrain"].values,
             ds["da_direct_dalgae"].values,
             ds["da_direct_ddust"].values,
+            ds["da_direct_dlwc"].values,
             ds["da_direct_dcosi"].values,
             ds["da_direct_dsvf"].values,
             # Diffuse derivatives
@@ -148,6 +151,7 @@ def snow_model_outputs(
             ds["da_diffuse_dgrain"].values,
             ds["da_diffuse_dalgae"].values,
             ds["da_diffuse_ddust"].values,
+            ds["da_diffuse_dlwc"].values,
             ds["da_diffuse_dcosi"].values,
             ds["da_diffuse_dsvf"].values,
             # VIS derivatives
@@ -156,6 +160,7 @@ def snow_model_outputs(
             ds["da_vis_dgrain"].values,
             ds["da_vis_dalgae"].values,
             ds["da_vis_ddust"].values,
+            ds["da_vis_dlwc"].values,
             ds["da_vis_dcosi"].values,
             ds["da_vis_dsvf"].values,
             # IR derivatives
@@ -164,6 +169,7 @@ def snow_model_outputs(
             ds["da_ir_dgrain"].values,
             ds["da_ir_dalgae"].values,
             ds["da_ir_ddust"].values,
+            ds["da_ir_dlwc"].values,
             ds["da_ir_dcosi"].values,
             ds["da_ir_dsvf"].values,
         ],
@@ -293,6 +299,7 @@ class SnowWorker(object):
         grain_vals = sub_state[..., self.grain_idx]
         dust_vals = sub_state[..., self.dust_idx]
         algae_vals = sub_state[..., self.algae_idx]
+        lwc_vals = sub_state[..., self.lwc_idx]
 
         output_snow[..., self.fsnow_sidx] = f_snow_vals
         output_snow[..., self.grain_sidx] = grain_vals
@@ -327,11 +334,12 @@ class SnowWorker(object):
             grain_val = np.clip(grain_vals[r, c], 30.0, 1500.0)
             algae_val = np.clip(algae_vals[r, c], 0.0, 6e5)
             dust_val = np.clip(dust_vals[r, c], 0.0, 4000.0)
+            lwc_val = np.clip(lwc_vals[r, c], 0.0, 25.0)
             sza_val = np.clip(self.obs[r, c, 4], 0.0, 70.0)
             cosi_val = np.clip(sub_state[r, c, self.cosi_idx], 1e-3, 1.0)
             svf_val = np.clip(sub_svf[r, c], 1e-3, 1.0)
 
-            interp_g = self.G(np.array([aot_val, h2o_val, alt_val, grain_val, algae_val, dust_val, sza_val, cosi_val, svf_val]))
+            interp_g = self.G(np.array([aot_val, h2o_val, alt_val, grain_val, algae_val, dust_val, lwc_val, sza_val, cosi_val, svf_val]))
             a = interp_g[0:5]
             d = interp_g[5:]
 
@@ -349,12 +357,17 @@ class SnowWorker(object):
                 sub_uncert[r, c, self.grain_idx],
                 sub_uncert[r, c, self.algae_idx],
                 sub_uncert[r, c, self.dust_idx],
+                sub_uncert[r, c, self.lwc_idx],
                 sub_uncert[r, c, self.cosi_idx],
                 self.svf_error_literature # svf , static assumed upper end from Dozier 2022
             ])
 
+            # NOTE on assumptions:
+            # 1. assumes independence and omits covariance
+            # 2. gaussian error distribution
+            # 3. local linearity
             for i, idx_s in enumerate([self.total_idx, self.dir_idx, self.diff_idx, self.vis_idx, self.ir_idx]):
-                output_snow_uncert[r, c, idx_s] = np.sqrt(np.sum(((d[i * 7 : (i + 1) * 7]) * u) ** 2))
+                output_snow_uncert[r, c, idx_s] = np.sqrt(np.sum(((d[i * 8 : (i + 1) * 8]) * u) ** 2))
 
             # Perform fSCA calculation
             # GO-VGF EQN - using a fixed b_R ratio of 2.7 for lodgepole pine
