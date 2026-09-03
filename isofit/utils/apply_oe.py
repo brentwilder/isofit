@@ -917,19 +917,6 @@ def apply_oe(
             logging.info("`config_only` enabled, exiting early")
             return
 
-        # TODO TEMP
-        if albedo_lut is not None and veg_fraction_file is not None:
-            snow_model_outputs(input_loc=input_loc,
-                                input_obs=input_obs,
-                                paths=paths,
-                                veg_fraction_file=veg_fraction_file,
-                                albedo_lut=albedo_lut,
-                                dayofyear=dayofyear, 
-                                n_cores=n_cores,
-                                nodata_value=-9999)
-            return
-
-
         # Run retrieval
         logging.info("Running ISOFIT with full LUT")
         retrieval_full = isofit.Isofit(
@@ -1003,10 +990,16 @@ def apply_oe(
             if os.path.exists(f):
                 os.remove(f)
 
-
-
-    # TODO
-    # PUT HERE
+    # Generate snow outputs
+    if albedo_lut is not None and veg_fraction_file is not None:
+        snow_model_outputs(input_loc=input_loc,
+                           input_obs=input_obs,
+                           paths=paths,
+                           veg_fraction_file=veg_fraction_file,
+                           albedo_lut=albedo_lut,
+                           dayofyear=dayofyear, 
+                           n_cores=n_cores,
+                           nodata_value=-9999)
 
     
 

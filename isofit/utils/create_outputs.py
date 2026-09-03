@@ -7,8 +7,44 @@ from spectral.io import envi
 from isofit import ray
 from isofit.core.common import envi_header
 from isofit.core.fileio import initialize_output, write_bil_chunk
-from isofit.core.common import VectorInterpolator
+from isofit.core.common import VectorInterpolator, eps
 
+FSNOW_THRESHOLD = 0.75
+
+B_R=2.7
+
+ALBEDO_AOT_MIN = 0.01 + eps
+ALBEDO_AOT_MAX = 0.6 - eps
+
+ALBEDO_H2O_MIN = 0.05 + eps
+ALBEDO_H2O_MAX = 0.50001 - eps
+
+ALBEDO_ALT_MIN = 0.0 + eps
+ALBEDO_ALT_MAX = 5.0 - eps
+
+ALBEDO_ALT_MIN = 0.0 + eps
+ALBEDO_ALT_MAX = 5.0 - eps
+
+ALBEDO_GRAIN_MIN = 30.0 + eps
+ALBEDO_GRAIN_MAX = 1500.0 - eps
+
+ALBEDO_ALGAE_MIN = 0.0 + eps
+ALBEDO_ALGAE_MAX = 6e5 - eps
+
+ALBEDO_DUST_MIN = 0.0 + eps
+ALBEDO_DUST_MAX = 4000.0 - eps
+
+ALBEDO_LWC_MIN = 0.0 + eps
+ALBEDO_LWC_MAX = 25.0 - eps
+
+ALBEDO_SZA_MIN = 0.0 + eps
+ALBEDO_SZA_MAX = 70.0 - eps
+
+ALBEDO_COSI_MIN = 1e-3 + eps
+ALBEDO_COSI_MAX = 70.0 - eps
+
+ALBEDO_SVF_MIN = 0.5 + eps
+ALBEDO_SVF_MAX = 1.0 - eps
 
 SNOW_BANDS = [
     "FSCA",
@@ -60,7 +96,6 @@ def snow_model_outputs(
     TODO
     """
 
-
     loc = envi.open(envi_header(input_loc), input_loc).open_memmap()
     rows, cols, _ = loc.shape
     del loc
@@ -79,11 +114,11 @@ def snow_model_outputs(
             "no data value": nodata_value,
             "lines": rows,
             "samples": cols,
-            "interleave": "bip",
+            "interleave": "bil",
             "band names": SNOW_BANDS,
         },
         outpath=outpath,
-        out_shape=(rows, cols, len(SNOW_BANDS)),
+        out_shape=(rows, len(SNOW_BANDS), cols),
         bands=f"{len(SNOW_BANDS)}",
         description="DISORT derived snow surface properties fit to TOA radiance",
     )
@@ -96,11 +131,11 @@ def snow_model_outputs(
             "no data value": nodata_value,
             "lines": rows,
             "samples": cols,
-            "interleave": "bip",
+            "interleave": "bil",
             "band names": SNOW_BANDS,
         },
         outpath=outpath_uncert,
-        out_shape=(rows, cols, len(SNOW_BANDS)),
+        out_shape=(rows, len(SNOW_BANDS), cols),
         bands=f"{len(SNOW_BANDS)}",
         description="DISORT derived snow surface properties fit to TOA radiance uncertainty",
     )
@@ -214,25 +249,35 @@ class SnowWorker(object):
     ):
         self.nodata_value = nodata_value
         self.rfl_outpath = outpath
-        self.unc_outpath = outpath_uncert
+        self.uncert_outpath = outpath_uncert
 
         self.G = G
 
         self.loc = envi.open(envi_header(input_loc), input_loc).open_memmap(interleave="bip")
         self.obs = envi.open(envi_header(input_obs), input_obs).open_memmap(interleave="bip")
-        self.state = envi.open(envi_header(paths.state_working_path), paths.state_working_path).open_memmap(interleave="bip")
+
+        state_img = envi.open(envi_header(paths.state_working_path), paths.state_working_path)
+        state_metadata_bands = state_img.metadata.get("band names")
+        self.state = state_img.open_memmap(interleave="bip")
+
         self.uncert = envi.open(envi_header(paths.uncert_working_path), paths.uncert_working_path).open_memmap(interleave="bip")
         
-        self.svf = envi.open(envi_header(paths.svf_working_path), paths.svf_working_path).open_memmap(interleave="bip").squeeze()
-        self.canopy = envi.open(envi_header(veg_fraction_file), veg_fraction_file).open_memmap(interleave="bip").squeeze()
+        self.svf = envi.open(envi_header(paths.svf_working_path), paths.svf_working_path).open_memmap(interleave="bip").squeeze().copy()
+        self.canopy = envi.open(envi_header(veg_fraction_file), veg_fraction_file).open_memmap(interleave="bip").squeeze().copy()
+
+        # NOTE a lot of the times these canopy will have nan for non-vegetated areas
+        # and so we will populate this with zeros
+        self.canopy[self.canopy<0.0] = 0.0
+        self.canopy[np.isnan(self.canopy)] = 0.0
 
         if np.nanmax(self.canopy) > 1.1 :
-            self.canopy = self.canopy / 100 # NOTE:dataset is 0-100 but need 0-1.
+            self.canopy = self.canopy / 100.0
         
         if np.nanmax(self.svf) > 1.1 :
-                    self.svf = self.svf / 100 # NOTE:dataset is 0-100 but need 0-1.
+            self.svf = self.svf / 100.0
 
-        # Grab cosi error from literature
+        # Grab terrain error from literature
+        # NOTE this cosi error is not used but keeping this here in case helpful
         dozier_2022_cosi_himachal_pradesh = [
             (355, 0.117),  # Dec 21
             (37,  0.111),  # Feb 6
@@ -251,7 +296,6 @@ class SnowWorker(object):
                                                       right=0.078))
         self.svf_error_literature = 0.0404
 
-        state_metadata_bands = self.state.metadata.get("band names")
         self.state_idx = {band.strip().upper(): i for i, band in enumerate(state_metadata_bands)}
         
         self.algae_idx = self.state_idx.get("ALGAE_CONC")
@@ -284,16 +328,17 @@ class SnowWorker(object):
 
     def run_chunks(self, line_breaks: tuple) -> None:
         start_line, stop_line = line_breaks
-        chunk_shape = (stop_line - start_line, self.n_samples, len(self.SNOW_BANDS))
+        chunk_shape = (stop_line - start_line, self.n_samples, len(SNOW_BANDS))
         
         output_snow = np.full(chunk_shape, self.nodata_value, dtype=np.float32)
         output_snow_uncert = np.full(chunk_shape, self.nodata_value, dtype=np.float32)
-
     
         sub_state = self.state[start_line:stop_line, :, :]
         sub_uncert = self.uncert[start_line:stop_line, :, :]
         sub_svf = self.svf[start_line:stop_line, :]
+        sub_canopy = self.canopy[start_line:stop_line, :]
         sub_loc = self.loc[start_line:stop_line, :, :]
+        sub_obs = self.obs[start_line:stop_line, :, :]
 
         f_snow_vals = sub_state[..., self.fsnow_idx]
         grain_vals = sub_state[..., self.grain_idx]
@@ -314,41 +359,61 @@ class SnowWorker(object):
         output_snow_uncert[..., self.algae_sidx] = sub_uncert[..., self.algae_idx]
         output_snow_uncert[..., self.cosi_sidx] = sub_uncert[..., self.cosi_idx]
 
-        invalid_mask = (
-            (f_snow_vals < 0.75) |
-            (grain_vals < 30.01) |
-            (grain_vals > 1499.99) |
-            (dust_vals > 3999.99)
-        )
+        # Exclude state (except for f_snow) where there is low snow
+        low_snow_mask = f_snow_vals < FSNOW_THRESHOLD
+        exclude_bands_snow = [
+            self.grain_sidx,
+            self.lwc_sidx,
+            self.dust_sidx,
+            self.algae_sidx,
+            self.cosi_sidx,
+        ]
+        for b_idx in exclude_bands_snow:
+            output_snow[low_snow_mask, b_idx] = self.nodata_value
+            output_snow_uncert[low_snow_mask, b_idx] = self.nodata_value
 
-        valid_mask = ~invalid_mask
+        # Perform fSCA calculation
+        # GO-VGF EQN
+        fshade = 0.0 # This term in the eqn can be ignored because we solve optimally for cos_i.
+        # Typically fshade is present because photometric shade is unaccounted for in the retrieval..
+        # In our retrieval since we solve for this, thre is no need to post-correct fSCA.
+        theta_v_prime = np.arctan(B_R * np.tan(np.radians(sub_obs[..., 2])))
+        theta_s_prime= np.radians(90 - np.degrees(np.arctan((B_R * np.tan(np.radians(90-sub_obs[..., 6]))))))
+        phi_v_prime = np.radians(sub_obs[..., 1]-sub_obs[..., 7])
+        vgf = (1-sub_canopy) ** ((np.cos(theta_s_prime)) / (np.cos(phi_v_prime)*np.sin(theta_v_prime)*np.sin(theta_s_prime)+np.cos(theta_v_prime)*np.cos(theta_s_prime)))
 
-        r_indices, c_indices = np.where(valid_mask)
+        fsca_denom = (1 - fshade - vgf) # denom seperated out bc canopy_cover can cause to be greater than 1.
+        fsca_denom = np.clip(fsca_denom, 1e-6, 1.0)
+        fsca_val = f_snow_vals / fsca_denom
+        output_snow[..., self.fsca_sidx] = np.clip(fsca_val, 0.0, 1.0)
+
+        r_indices, c_indices = np.where((f_snow_vals >= FSNOW_THRESHOLD))
 
         for r, c in zip(r_indices, c_indices):
-
+   
             # NOTE Clipping to max of albedo LUT generated on 3 Sep 2026
-            aot_val = np.clip(sub_state[r, c, self.aot_idx], 0.01, 0.6)
-            h2o_val = np.clip(sub_state[r, c, self.h2o_idx], 0.05, 0.50001)
-            alt_val = np.clip(sub_loc[r, c, 2] / 1000.0, 0.0, 5.001)  # to km
-            grain_val = np.clip(grain_vals[r, c], 30.0, 1500.0)
-            algae_val = np.clip(algae_vals[r, c], 0.0, 6e5)
-            dust_val = np.clip(dust_vals[r, c], 0.0, 4000.0)
-            lwc_val = np.clip(lwc_vals[r, c], 0.0, 25.0)
-            sza_val = np.clip(self.obs[r, c, 4], 0.0, 70.0)
-            cosi_val = np.clip(sub_state[r, c, self.cosi_idx], 1e-3, 1.0)
-            svf_val = np.clip(sub_svf[r, c], 1e-3, 1.0)
+            _aot_v = np.clip(sub_state[r, c, self.aot_idx], ALBEDO_AOT_MIN, ALBEDO_AOT_MAX)
+            _h2o_v = np.clip(sub_state[r, c, self.h2o_idx], ALBEDO_H2O_MIN, ALBEDO_H2O_MAX)
+            _alt_v = np.clip(sub_loc[r, c, 2] / 1000.0, ALBEDO_ALT_MIN, ALBEDO_ALT_MAX)
+            _grain_v = np.clip(grain_vals[r, c], ALBEDO_GRAIN_MIN, ALBEDO_GRAIN_MAX)
+            _algae_v = np.clip(algae_vals[r, c], ALBEDO_ALGAE_MIN, ALBEDO_ALGAE_MAX)
+            _dust_v = np.clip(dust_vals[r, c], ALBEDO_DUST_MIN, ALBEDO_DUST_MAX)
+            _lwc_v = np.clip(lwc_vals[r, c], ALBEDO_LWC_MIN, ALBEDO_LWC_MAX)
+            _sza_v = np.clip(sub_obs[r, c, 4], ALBEDO_SZA_MIN, ALBEDO_SZA_MAX)
+            _cosi_v = np.clip(sub_state[r, c, self.cosi_idx], ALBEDO_COSI_MIN, ALBEDO_COSI_MAX)
+            _svf_v = np.clip(sub_svf[r, c], ALBEDO_SVF_MIN, ALBEDO_SVF_MAX)
 
-            interp_g = self.G(np.array([aot_val, h2o_val, alt_val, grain_val, algae_val, dust_val, lwc_val, sza_val, cosi_val, svf_val]))
+            interp_g = self.G(np.array([_aot_v, _h2o_v, _alt_v, _grain_v, _algae_v, _dust_v, _lwc_v, _sza_v, _cosi_v, _svf_v]))
+
             a = interp_g[0:5]
             d = interp_g[5:]
 
             # Storing interpolated albedo from LUT
-            output_snow[r, c, self.total_idx] = a[0]
-            output_snow[r, c, self.dir_idx] = a[1]
-            output_snow[r, c, self.diff_idx] = a[2]
-            output_snow[r, c, self.vis_idx] = a[3]
-            output_snow[r, c, self.ir_idx] = a[4]
+            output_snow[r, c, self.total_sidx] = a[0]
+            output_snow[r, c, self.dir_sidx] = a[1]
+            output_snow[r, c, self.diff_sidx] = a[2]
+            output_snow[r, c, self.vis_sidx] = a[3]
+            output_snow[r, c, self.ir_sidx] = a[4]
 
             # Error propagation for albedo based on OE uncertainty
             u = np.array([
@@ -366,46 +431,21 @@ class SnowWorker(object):
             # 1. assumes independence and omits covariance
             # 2. gaussian error distribution
             # 3. local linearity
-            for i, idx_s in enumerate([self.total_idx, self.dir_idx, self.diff_idx, self.vis_idx, self.ir_idx]):
+            for i, idx_s in enumerate([self.total_sidx, self.dir_sidx, self.diff_sidx, self.vis_sidx, self.ir_sidx]):
                 output_snow_uncert[r, c, idx_s] = np.sqrt(np.sum(((d[i * 8 : (i + 1) * 8]) * u) ** 2))
-
-            # Perform fSCA calculation
-            # GO-VGF EQN - using a fixed b_R ratio of 2.7 for lodgepole pine
-            b_R=2.7
-            fshade = 0.0 # This term in the eqn can be ignored because we solve optimally for cos_i.
-            # Typically fshade is present because photometric shade is unaccounted for in the retrieval..
-            # In our retrieval since we solve for this, thre is no need to post-correct fSCA.
-            
-            theta_v_prime = np.arctan(b_R * np.tan(np.radians(self.obs[r, c, 2])))
-            theta_s_prime= np.radians(90 - np.degrees(np.arctan((b_R * np.tan(np.radians(90-self.obs[r, c, 6]))))))
-            phi_v_prime = np.radians(self.obs[r, c, 1]-self.obs[r, c, 7])
-            vgf = (1-self.canopy[r,c]) ** ((np.cos(theta_s_prime)) / (np.cos(phi_v_prime)*np.sin(theta_v_prime)*np.sin(theta_s_prime)+np.cos(theta_v_prime)*np.cos(theta_s_prime)))
-
-            fsca_denom = (1 - fshade - vgf) # denom seperated out bc canopy_cover can cause to be greater than 1.
-
-            if fsca_denom > 1.0:
-                fsca_denom = 1.0
-
-            elif fsca_denom <= 1e-6:
-                 fsca_denom = 1.0
-
-            fsca_val = f_snow_vals[r, c] / fsca_denom
-
-            fsca_val = max(0.0, min(1.0, fsca_val))
-
-            output_snow[r, c, self.fsca_sidx] = fsca_val
 
 
         write_bil_chunk(
             np.swapaxes(output_snow, 1, 2),
             self.rfl_outpath,
             start_line,
-            (self.n_lines, len(self.SNOW_BANDS), self.n_samples),
+            (self.n_lines, len(SNOW_BANDS), self.n_samples),
         )
 
+        # Save surface snow property uncertainty
         write_bil_chunk(
             np.swapaxes(output_snow_uncert, 1, 2),
-            self.unc_outpath,
+            self.uncert_outpath,
             start_line,
-            (self.n_lines, len(self.SNOW_BANDS), self.n_samples),
+            (self.n_lines, len(SNOW_BANDS), self.n_samples),
         )

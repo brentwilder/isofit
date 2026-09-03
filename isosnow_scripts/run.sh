@@ -15,7 +15,7 @@ obs_file="/Users/bawilder/Code/sister/output/test2/clip/emit20250327T212148_000_
 
 # Path to emulator
 #EMULATOR_PATH="/Users/bawilder/Documents/sRTMnet/sRTMnet.h5"
-#EMULATOR_PATH="/Users/bawilder/Documents/sRTMnet/20251206_6c_5layer_-1.6c"
+EMULATOR_PATH="/Users/bawilder/Documents/sRTMnet/20251206_6c_5layer_-1.6c"
 
 # PREBUILT LUT
 LUT="/Users/bawilder/Code/isofit-PRs/local/test/20260828_snowmodel/lut_full/lut.zarr"
@@ -40,7 +40,7 @@ SKYVIEW="/Users/bawilder/Code/sister/output/test2/clip/sky_view_factor"
 # Ancillary data for postprocessing albedo
 VEG="/Users/bawilder/Documents/SNOW/EMIT/VEG_TESTING/modis_lakemary"
 
-ALBEDO="/Users/bawilder/Code/snow/LUT/EMIT_L3/EMIT_DISORT_20260828_ALBEDO.nc"
+ALBEDO="/Users/bawilder/Code/snow/LUT/EMIT_L3/EMIT_DISORT_20260828_ALBEDO_2.nc"
 
 
 # Run iso
@@ -48,6 +48,7 @@ isofit apply_oe "${rdn_file}" "${loc_file}" "${obs_file}" "${OUTPUT_DIR}" "${SEN
   --surface_path="${SURFACE_CONFIG_DIR}" \
   --wavelength_path="${wavelength_file}" \
   --prebuilt_lut="${LUT}" \
+  --emulator_base="${EMULATOR_PATH}" \
   --n_cores=${n_cores} \
   --atmosphere_type="${ATMOS}" \
   --logging_level="${LOGGING}" \
