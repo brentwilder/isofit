@@ -9,10 +9,16 @@ from isofit.core.common import envi_header
 from isofit.core.fileio import initialize_output, write_bil_chunk
 from isofit.core.common import VectorInterpolator, eps
 
+
+# Empirical threshold for limiting to high quality data
+# TODO more testing to determine if this is the best value to use 
 FSNOW_THRESHOLD = 0.75
 
+# Factor for VZA-canopy adjustment for tree type
 B_R=2.7
 
+# These terms are to ensure we stay within reasonable limits of the albedo LUT generated 
+# NOTE these can change if a new LUT is used
 ALBEDO_AOT_MIN = 0.01 + eps
 ALBEDO_AOT_MAX = 0.6 - eps
 
@@ -46,6 +52,8 @@ ALBEDO_COSI_MAX = 70.0 - eps
 ALBEDO_SVF_MIN = 0.5 + eps
 ALBEDO_SVF_MAX = 1.0 - eps
 
+
+# Outputs for the snow and snow_uncert files
 SNOW_BANDS = [
     "FSCA",
     "SNOW_ALBEDO_TOTAL",
@@ -61,6 +69,8 @@ SNOW_BANDS = [
     "COS_I",
 ]
 
+# Outputs from Apply_oe
+# NOTE: this will need to change if we update any of the state variable names
 STATE_BANDS = [
     "ALGAE_CONC",
     "COS_I",
@@ -332,13 +342,23 @@ class SnowWorker(object):
         
         output_snow = np.full(chunk_shape, self.nodata_value, dtype=np.float32)
         output_snow_uncert = np.full(chunk_shape, self.nodata_value, dtype=np.float32)
-    
+
         sub_state = self.state[start_line:stop_line, :, :]
         sub_uncert = self.uncert[start_line:stop_line, :, :]
         sub_svf = self.svf[start_line:stop_line, :]
         sub_canopy = self.canopy[start_line:stop_line, :]
         sub_loc = self.loc[start_line:stop_line, :, :]
         sub_obs = self.obs[start_line:stop_line, :, :]
+
+        # Mask data nodata
+        # This includes cloud and no data edges
+        # TODO: could track this better throughout (for now all just set to nodata)
+        # - inversion failure
+        # - cloud mask
+        # - actual no data (edges)
+        zero_mask = np.all(sub_state == 0.0, axis=-1)
+        output_snow[zero_mask, :] = self.nodata_value
+        output_snow_uncert[zero_mask, :] = self.nodata_value
 
         f_snow_vals = sub_state[..., self.fsnow_idx]
         grain_vals = sub_state[..., self.grain_idx]
