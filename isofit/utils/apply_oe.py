@@ -31,7 +31,7 @@ from isofit.utils import (
     segment,
 )
 from isofit.utils.skyview import skyview
-from isofit.utils.adjacency import process_background_data
+from isofit.utils.adjacency import process_background_data, approx_pixel_size
 from isofit.utils.create_outputs import snow_model_outputs
 
 EPS = 1e-6
@@ -381,6 +381,9 @@ def apply_oe(
                 )
                 raise ValueError(err_str)
 
+    loc = envi.open(envi_header(input_loc), input_loc).open_memmap()
+    pix_res = float(approx_pixel_size(loc=loc, nodata_value=-9999))
+
     # Check if user passed a path to sky view factor image file or method, else it is None.
     if skyview_factor:
         # deal with condition if they have a file named precomputed-slope locally
@@ -389,7 +392,7 @@ def apply_oe(
                 f"File name {skyview_factor} is too similar to method, 'slope'. Please rename or change method and try running again."
             )
         # slope based method to compute skyview and save file, rename to path
-        if skyview_factor.lower() == "slope":
+        if skyview_factor.lower() == "horizon":
             # overwrite arg to be the resulting filepath. create new directory
             # NOTE: this new directory should be in paths.make_directories(),
             # but cannot at the moment because of the order of operations...
@@ -397,12 +400,15 @@ def apply_oe(
             if not exists(os.path.dirname(skyview_factor)):
                 os.mkdir(os.path.dirname(skyview_factor))
             skyview(
-                input=input_obs,
+                input=input_loc,
                 output_directory=os.path.dirname(skyview_factor),
-                obs_or_loc="obs",
-                method="slope",
+                obs_or_loc="loc",
+                method="horizon",
+                resolution=pix_res,
                 log_file=log_file,
                 logging_level=logging_level,
+                n_cores=n_cores,
+                n_angles=32,
             )
         if not exists(skyview_factor):
             raise ValueError(

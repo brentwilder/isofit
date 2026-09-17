@@ -50,7 +50,7 @@ LOGGING="INFO"
 
 # SKYVIEW
 #SKYVIEW="/Users/bawilder/Code/sister/output/test2/clip/sky_view_factor"
-SKYVIEW="slope"
+SKYVIEW="horizon"
 
 # Ancillary data for postprocessing albedo
 VEG="/Users/bawilder/Documents/SNOW/EMIT/VEG_TESTING/modis_lakemary"
