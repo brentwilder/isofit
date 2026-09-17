@@ -39,6 +39,7 @@ KEYS = [
     "statevec_idxs",
     "lut_names",
     "lut_grid",
+    "lut_grid_itp",
     "solve_mixed_pixel",
     "idx_fractional_data",
     "idx_fractional_em",
@@ -48,6 +49,8 @@ KEYS = [
     "vza_idx",
     "raa_idx",
     "cos_i_idx",
+    "grain_idx",
+    "grain_idx_lut",
 ]
 
 # Diffuse-Direct Key
@@ -325,6 +328,10 @@ class LUTSurface(Surface):
         for v, idx in zip(x_surface, self.statevec_idxs):
             point[idx] = v
 
+        # Apply the sqrt transformation to grain during inversion
+        if self.grain_idx is not None:
+            point[self.grain_idx_lut] = np.sqrt(x_surface[self.grain_idx])
+
         # Either take cosi from geom or from state
         if self.cos_i_idx is not None:
             cos_i = x_surface[self.cos_i_idx]
@@ -341,8 +348,8 @@ class LUTSurface(Surface):
         if self.raa_idx is not None:
             point[self.raa_idx] = geom.relative_azimuth
 
-        # Ensure the point is contained in the lut grid
-        for i, grid_axis in enumerate(self.lut_grid):
+        # Ensure the point is contained in the lut grid itp list
+        for i, grid_axis in enumerate(self.lut_grid_itp):
             point[i] = max(grid_axis[0], min(point[i], grid_axis[-1]))
 
         return point
@@ -686,6 +693,16 @@ def load_prebuilt_surface(
                 f"Variable:{name.lower()} in the statevector is not supported."
             )
 
+    grain_idx = next((i for i, n in enumerate(statevec_names) if n.lower() == "grain_radius"), None)
+
+    # Under the hood, lut_grid transforms grain radius to sqrt grain radius to reduce interpolation error
+    # This is specific to the snow model which has GRAIN_RADIUS as a dimension. 
+    # This could be extended to other params as well, 
+    # but previous work by Jeff Dozier has shown this to specifically help for grain size.
+    grain_idx_lut = next((i for i, n in enumerate(lut_names) if n.lower() == "grain_radius"), None)
+    lut_grid_itp = lut_grid.copy()
+    lut_grid_itp[grain_idx_lut] = np.sqrt(lut_grid_itp[grain_idx_lut])
+
     itp_hd = None
     itp_dd = None
 
@@ -695,9 +712,9 @@ def load_prebuilt_surface(
         data_dd = next((data[a] for a in R_DD_ALIASES if a in data), None)
 
         # hd is required, dd is optional
-        itp_hd = VectorInterpolator(lut_grid, data_hd.astype(np.float32))
+        itp_hd = VectorInterpolator(lut_grid_itp, data_hd.astype(np.float32))
         if data_dd is not None:
-            itp_dd = VectorInterpolator(lut_grid, data_dd.astype(np.float32))
+            itp_dd = VectorInterpolator(lut_grid_itp, data_dd.astype(np.float32))
 
     # define locals first before looping through updates
     local_vars = locals()

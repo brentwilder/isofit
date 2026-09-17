@@ -26,6 +26,8 @@ pip install -e .
 
 ## Change log
 
+- 16 September 2026: Adding sqrt transformation for grain radius to reduce interpolation error
+
 - 10 September 2026: Integrated analytical Jacobian to account for cos_i, instead of relying on numerical, 2-point method (EMIT speed test: 11.22 spectra/sec to 20.99 spectra/sec). Also, fixed bug to assign average rfl to nodata for adjacency calc (prior to aggregating). 
 
 - 9 September 2026: ISOFIT PR-1026, inversion windows patch (EMIT)

@@ -156,7 +156,7 @@ def snow_model_outputs(
         ds["aot"].values,
         ds["h2o"].values,
         ds["altitude"].values,
-        ds["grain_radius"].values,
+        np.sqrt(ds["grain_radius"].values),
         ds["algae_conc"].values,
         ds["dust_conc"].values,
         ds["lwc"].values,
@@ -428,7 +428,9 @@ class SnowWorker(object):
             _cosi_v = np.clip(sub_state[r, c, self.cosi_idx], ALBEDO_COSI_MIN, ALBEDO_COSI_MAX)
             _svf_v = np.clip(sub_svf[r, c], ALBEDO_SVF_MIN, ALBEDO_SVF_MAX)
 
-            interp_g = self.G(np.array([_aot_v, _h2o_v, _alt_v, _grain_v, _algae_v, _dust_v, _lwc_v, _sza_v, _cosi_v, _svf_v]))
+            _grain_v_sqrt = np.sqrt(_grain_v)
+
+            interp_g = self.G(np.array([_aot_v, _h2o_v, _alt_v, _grain_v_sqrt, _algae_v, _dust_v, _lwc_v, _sza_v, _cosi_v, _svf_v]))
 
             a = interp_g[0:5]
             d = interp_g[5:]
@@ -444,7 +446,7 @@ class SnowWorker(object):
             u = np.array([
                 sub_uncert[r, c, self.aot_idx],
                 sub_uncert[r, c, self.h2o_idx],
-                sub_uncert[r, c, self.grain_idx],
+                sub_uncert[r, c, self.grain_idx] / (2.0 * _grain_v_sqrt), # chain rule scaling
                 sub_uncert[r, c, self.algae_idx],
                 sub_uncert[r, c, self.dust_idx],
                 sub_uncert[r, c, self.lwc_idx],
