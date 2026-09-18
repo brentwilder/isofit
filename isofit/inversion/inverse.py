@@ -114,7 +114,7 @@ class Inversion:
                 self.fm.bounds[0][self.inds_free],
                 self.fm.bounds[1][self.inds_free],
             ),
-            "x_scale": self.fm.scale[self.inds_free],
+            "x_scale": "jac",
         }
 
         # Update the rest from the config
@@ -138,32 +138,11 @@ class Inversion:
 
         x = self.full_statevector(x_free)
         xa = self.fm.xa(x, geom)
-        Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa(x, geom)
-
-        # If there aren't any fixed parameters, we just directly
-        if self.x_fixed is None or self.grid_as_starting_points:
-            return xa, Sa, Sa_inv, Sa_inv_sqrt
-        else:
-            # otherwise condition on fixed variables
-            # TODO: could make the below calculation without the svd_inv (using full initial inversion),
-            # which would be way cheaper
-            xa_free, Sa_free = conditional_gaussian(
-                xa, Sa, self.inds_free, self.inds_fixed, self.x_fixed
-            )
-            Sa_free_inv, Sa_free_inv_sqrt = svd_inv_sqrt(
-                Sa_free, hashtable=self.hashtable, max_hash_size=self.max_table_size
-            )
-            return xa_free, Sa_free, Sa_free_inv, Sa_free_inv_sqrt
-
-    def calc_prior(self, x, geom):
-        """Calculate prior distribution of radiance. This depends on the
-        location in the state space. Return the inverse covariance and
-        its square root (for non-quadratic error residual calculation)."""
-
-        xa = self.fm.xa(x, geom)
-        Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa(x, geom)
+        #Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa(x, geom)
+        Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa_state, self.fm.Sa_inv_state, self.fm.Sa_inv_sqrt_state
 
         return xa, Sa, Sa_inv, Sa_inv_sqrt
+    
 
     def calc_posterior(self, x, geom, meas):
         """Calculate posterior distribution of state vector. This depends

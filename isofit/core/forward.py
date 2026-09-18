@@ -177,6 +177,10 @@ class ForwardModel:
         else:
             self.xa = self.xa_static
 
+        # NOTE Sa is always the same for the snow model 
+        # assumed here
+        self.Sa_state, self.Sa_inv_state, self.Sa_inv_sqrt_state = self.Sa(self.init)
+
     @staticmethod
     def clip_bounds(x, bounds, inds_free=slice(None), eps=1e-5):
         """Clip state vector against bounds.
@@ -246,7 +250,7 @@ class ForwardModel:
         xa_instrument = self.instrument.xa()
         return np.concatenate((xa_surface, xa_atmosphere, xa_instrument), axis=0)
 
-    def Sa(self, x, geom):
+    def Sa(self, x, geom=None):
         """Calculate the prior covariance of the state vector (the
         concatenation of state vectors for the surface and the atmosphere).
 
@@ -256,7 +260,7 @@ class ForwardModel:
 
         x_surface = x[self.idx_surface]
         Sa_surface, Sa_surf_inv_norm, Sa_surf_inv_sqrt_norm = self.surface.Sa(
-            x_surface, geom
+            x_surface, geom=None
         )
         Sa_atmosphere = self.atmosphere.Sa()
         Sa_instrument = self.instrument.Sa()
