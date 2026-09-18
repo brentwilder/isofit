@@ -20,7 +20,7 @@
 import logging
 import numpy as np
 from spectral.io import envi
-from scipy.ndimage import uniform_filter
+from scipy.ndimage import uniform_filter, convolve
 
 from isofit.core.common import envi_header
 from isofit.utils.algebraic_line import algebraic_line
@@ -37,6 +37,9 @@ from isofit.utils import extractions, reducers
 # We could also think of more custom weighting treatments for borders in future.
 UNIFORM_FILTER_MODE = "nearest"
 
+# weights based on example in Richter 1998, `Correction of satellite imagery over mountainous terrain`
+RADII_KM = [0.0, 0.45, 0.65, 0.80, 0.90, 1.0]
+WEIGHTS = [0.24, 0.24, 0.22, 0.15, 0.15]
 
 def approx_pixel_size(loc, nodata_value=-9999):
     """Average, approximate pixel size assuming planar locally (units in m)."""
@@ -163,6 +166,32 @@ def process_background_data(
 
     kernel_diameter = int(np.ceil(2 * np.max(adj_range) / pixel_size + 1))
 
+
+    # Construct Richter (1998) distance-weighted spatial kernel
+    kernel_radius = kernel_diameter // 2
+    yk, xk = np.ogrid[-kernel_radius:kernel_radius+1, -kernel_radius:kernel_radius+1]
+    dist_km = np.sqrt(xk**2 + yk**2) * pixel_size
+
+    kernel = np.zeros((kernel_diameter, kernel_diameter), dtype=float)
+    for i in range(len(WEIGHTS)):
+        r_low = RADII_KM[i]
+        r_high = min(RADII_KM[i+1], adj_range)
+        if r_low >= adj_range:
+            break
+        mask = (dist_km >= r_low) & (dist_km < r_high)
+        kernel[mask] = WEIGHTS[i]
+
+    boundary_mask = (dist_km == RADII_KM[-1]) & (RADII_KM[-1] <= adj_range)
+    if np.any(boundary_mask):
+        kernel[boundary_mask] = WEIGHTS[-1]
+
+    if kernel.sum() > 0:
+        kernel /= kernel.sum()
+    else:
+        kernel[kernel_radius, kernel_radius] = 1.0
+
+    kernel = kernel[:, :, np.newaxis]
+
     del loc
 
     # Calls algebraic line using presolve config
@@ -225,10 +254,8 @@ def process_background_data(
     bg_rfl[np.any(bg_rfl == nodata_value, axis=-1), :] = np.nan
     bg_rfl[:] = np.where(np.isnan(bg_rfl), np.nanmean(bg_rfl, axis=(0, 1), keepdims=True), bg_rfl)
 
-    # For now, this applies a uniform window average based on adjacency range.
-    bg_rfl[:, :, :] = uniform_filter(
-        bg_rfl, size=(kernel_diameter, kernel_diameter, 1), mode=UNIFORM_FILTER_MODE
-    )
+    bg_rfl[:, :, :] = convolve(bg_rfl, kernel, mode=UNIFORM_FILTER_MODE)
+    
     del bg_rfl
 
     if use_superpixels:
@@ -290,10 +317,8 @@ def process_background_data(
     bgtopo[np.any(bgtopo == nodata_value, axis=-1), :] = np.nan
     bgtopo[:] = np.where(np.isnan(bgtopo), np.nanmean(bgtopo, axis=(0, 1), keepdims=True), bgtopo)
 
-    # For now, this applies a uniform window average based on adjacency range.
-    bgtopo[:, :, :] = uniform_filter(
-        bgtopo, size=(kernel_diameter, kernel_diameter, 1), mode=UNIFORM_FILTER_MODE
-    )
+    bgtopo[:, :, :] = convolve(bgtopo, kernel, mode=UNIFORM_FILTER_MODE)
+
     del bgtopo
 
     if use_superpixels:

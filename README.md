@@ -26,6 +26,8 @@ pip install -e .
 
 ## Change log
 
+- 17 September 2026: Bring in weights based on example in Richter 1998 (Correction of satellite imagery over mountainous terrain) for adjacency range. This is similar to what we showed in Alex's Springer Series.
+
 - 16 September 2026: Adding sqrt transformation for grain radius to reduce interpolation error
 
 - 10 September 2026: Integrated analytical Jacobian to account for cos_i, instead of relying on numerical, 2-point method (EMIT speed test: 11.22 spectra/sec to 20.99 spectra/sec). Also, fixed bug to assign average rfl to nodata for adjacency calc (prior to aggregating). 
