@@ -148,10 +148,6 @@ class Inversion:
         """Calculate posterior distribution of state vector. This depends
         both on the location in the state space and the radiance (via noise)."""
 
-        # NOTE: for now, this assumes uninformative priors for the S_hat
-        # For our snow model this is a fairly safe assumption. 
-        # We do not typically make strict priors for grain size, etc.
-
         K = geom.total_jac
 
         Seps = self.fm.Seps(x, meas, geom)
@@ -159,13 +155,15 @@ class Inversion:
         Seps_inv = svd_inv(
             Seps, hashtable=self.hashtable, max_hash_size=self.max_table_size
         )
+        Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa_state, self.fm.Sa_inv_state, self.fm.Sa_inv_sqrt_state
 
         # import pdb
         # pdb.set_trace()
-        S_hat = np.linalg.pinv(
-            K.T @ K
-        ) 
-        # S_hat = np.linalg.pinv(K.T.dot(Seps_inv).dot(K) + Sa_inv)
+        #S_hat = np.linalg.pinv(
+        #    K.T @ K
+        #) 
+        #S_hat = np.linalg.pinv(K.T.dot(Seps_inv).dot(K) + Sa_inv)
+        S_hat = np.linalg.pinv(K.T.dot(K) + Sa_inv)
 
         G = S_hat.dot(K.T).dot(Seps_inv)
 

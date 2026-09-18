@@ -26,7 +26,7 @@ pip install -e .
 
 ## Change log
 
-- 17 September 2026: Bring in weights based on example in Richter 1998 (Correction of satellite imagery over mountainous terrain) for adjacency range. This is similar to what we showed in Alex's Springer Series. Also, changed x_scale="jac" for the optimization. And then, stopped computing Sa_inv every iteration because it is always the same in the snow model.
+- 17 September 2026: Bring in weights based on example in Richter 1998 (Correction of satellite imagery over mountainous terrain) for adjacency range. This is similar to what we showed in Alex's Springer Series. Also, changed x_scale="jac" for the optimization. And then, stopped computing Sa_inv every iteration because it is always the same in the snow model. Finally, S_hat is fully corrected now, and utilizes Sa (allowing us to use informative priors if we need at any point).
 
 - 16 September 2026: Adding sqrt transformation for grain radius to reduce interpolation error
 
@@ -42,8 +42,6 @@ pip install -e .
 
 
 ## Additional notes
-
-- Currently `S_hat` does not use any information from `Sa` because we use typically use uninformative priors in the snow model
 
 - `COS_I` is always set to be solved (instead of "flat" or "dem"), and is fully hooked up between surface and atmosphere RT.
 
