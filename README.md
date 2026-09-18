@@ -26,7 +26,9 @@ pip install -e .
 
 ## Change log
 
-- 17 September 2026: Bring in weights based on example in Richter 1998 (Correction of satellite imagery over mountainous terrain) for adjacency range. This is similar to what we showed in Alex's Springer Series. Also, changed x_scale="jac" for the optimization. And then, stopped computing Sa_inv every iteration because it is always the same in the snow model. Finally, S_hat is fully corrected now, and utilizes Sa (allowing us to use informative priors if we need at any point).
+- 18 September 2026: Bring in some prior beliefs about the static cos(i) from the DEM (Dozier et al., 2022). This is a function of per-pixel slope and aspect uncertainties.
+
+- 17 September 2026: Bring in weights based on example in Richter 1998 (Correction of satellite imagery over mountainous terrain) for adjacency range. This is similar to what we showed in Alex's Springer Series. And then also, stopped computing Sa_inv every iteration because it is always the same in the snow model. Finally, S_hat is fully corrected now, and utilizes Sa (allowing us to use informative priors if we need at any point).
 
 - 16 September 2026: Adding sqrt transformation for grain radius to reduce interpolation error
 

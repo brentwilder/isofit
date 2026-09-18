@@ -80,10 +80,30 @@ class Geometry:
             self.solar_azimuth = obs[3]  # 0 to 360 clockwise from N
             self.solar_zenith = obs[4]  # 0 to 90 from zenith
             self.slope = obs[6]  # 0 to 90 from horizontal plane
+            self.aspect = obs[7]  # 0 to 90 from horizontal plane
             self.cos_i = obs[8]  # cosine of eSZA
+            self.cos_i_static = obs[8]
             # calculate relative to-sun azimuth
             delta_phi = np.abs(self.solar_azimuth - self.observer_azimuth)
             self.relative_azimuth = np.minimum(delta_phi, 360 - delta_phi)  # 0 to 180
+
+            # Dozier 2022 priors for cosi
+            slope_sigma = np.radians(4.15)
+            aspect_sigma = np.radians(24.5)
+            theta_s = np.radians(self.solar_zenith)
+            phi_s = np.radians(self.solar_azimuth)
+            theta_topo = np.radians(self.slope)
+            phi_topo = np.radians(self.aspect)
+            
+            d_dtheta = -np.cos(theta_s) * np.sin(theta_topo) + np.sin(theta_s) * np.cos(theta_topo) * np.cos(phi_s - phi_topo)
+            d_dphi = np.sin(theta_s) * np.sin(theta_topo) * np.sin(phi_s - phi_topo)
+            
+            self.cosi_prior_sigma = np.sqrt((d_dtheta * slope_sigma)**2 + (d_dphi * aspect_sigma)**2)
+            self.cosi_prior_mean = self.cos_i_static
+
+            # For large slopes, making this uninformative
+            if self.slope > 20.0:
+                self.cosi_prior_sigma = 1e6
 
         # The 'loc' object is a list-like object that optionally contains
         # latitude and longitude information about the surface being

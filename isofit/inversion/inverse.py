@@ -114,7 +114,7 @@ class Inversion:
                 self.fm.bounds[0][self.inds_free],
                 self.fm.bounds[1][self.inds_free],
             ),
-            "x_scale": "jac",
+            "x_scale": self.fm.scale[self.inds_free],
         }
 
         # Update the rest from the config
@@ -138,8 +138,19 @@ class Inversion:
 
         x = self.full_statevector(x_free)
         xa = self.fm.xa(x, geom)
-        #Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa(x, geom)
-        Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa_state, self.fm.Sa_inv_state, self.fm.Sa_inv_sqrt_state
+
+        Sa = self.fm.Sa_state.copy()
+        Sa_inv = self.fm.Sa_inv_state.copy()
+        Sa_inv_sqrt = self.fm.Sa_inv_sqrt_state.copy()
+
+        if hasattr(geom, "cosi_prior_sigma") and "COS_I" in self.fm.statevec:
+            idx = self.fm.statevec.index("COS_I")
+            xa[idx] = geom.cosi_prior_mean
+            
+            var = geom.cosi_prior_sigma ** 2
+            Sa[idx, idx] = var
+            Sa_inv[idx, idx] = 1.0 / var
+            Sa_inv_sqrt[idx, idx] = 1.0 / geom.cosi_prior_sigma
 
         return xa, Sa, Sa_inv, Sa_inv_sqrt
     
@@ -155,7 +166,7 @@ class Inversion:
         Seps_inv = svd_inv(
             Seps, hashtable=self.hashtable, max_hash_size=self.max_table_size
         )
-        Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa_state, self.fm.Sa_inv_state, self.fm.Sa_inv_sqrt_state
+        xa, Sa, Sa_inv, Sa_inv_sqrt = self.calc_conditional_prior(x, geom)
 
         # import pdb
         # pdb.set_trace()
