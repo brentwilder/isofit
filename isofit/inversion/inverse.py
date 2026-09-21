@@ -28,7 +28,7 @@ import scipy.linalg
 from scipy.optimize import least_squares
 
 from isofit.core.common import combos, conditional_gaussian, eps, svd_inv, svd_inv_sqrt
-from isofit.inversion.inverse_simple import invert_simple
+from isofit.inversion.inverse_simple import heuristic_atmosphere, invert_algebraic
 
 error_code = -1
 
@@ -307,10 +307,56 @@ class Inversion:
 
             # Calculate the initial solution, if needed.
             x0 = self.fm.init
+            x0_surface, x0_atmosphere, x0_instrument = self.fm.unpack(x0)
 
+            x0_atmosphere = heuristic_atmosphere(self.fm, 
+                                                 x0_surface, 
+                                                 x0_atmosphere, 
+                                                 x0_instrument,
+                                                 meas, 
+                                                 geom)
+
+            rfl0, _ = invert_algebraic(self.fm, x0_surface, x0_atmosphere, x0_instrument, meas, geom)
+
+            green = rfl0[np.argmin(np.abs(self.fm.surface.wl - 550.0))]
+            swir = rfl0[np.argmin(np.abs(self.fm.surface.wl - 1640.0))]
+            ndsi = (green - swir) / (green + swir + eps)
+
+            # NDSI heuristic based on Lake Mary scene
+            # Fit: f_snow = 0.073 * exp(2.404 * NDSI) + 0.050
+            f_snow0 = min( max(0, float(0.073 * np.exp(2.404 * ndsi) + 0.050)) , 1)
+
+            n_endmembers = len(self.fm.surface.endmember_names) if hasattr(self.fm.surface, 'endmember_names') else 0
+            if n_endmembers > 0:
+                _rem_frac = max(eps, (1.0 - f_snow0) / n_endmembers)
+                softmax_vals = [np.log(max(f_snow0, eps))]
+                for _ in range(n_endmembers):
+                    softmax_vals.append(np.log(_rem_frac))
+                
+                for idx_em, val in zip(self.fm.surface.idx_em_rfls, softmax_vals):
+                    x0_surface[idx_em] = np.clip(val, -5.0, 5.0)
+
+
+
+            # Grain size heuristic based on contiuum removal at 1030 ice feature (Nolin & Dozier, 2000)
+            # NOTE: the estimate is a function of the DISORT LUT parameters/settings
+            if hasattr(self.fm.surface, 'grain_idx') and self.fm.surface.grain_idx is not None:
+            
+                gidx = (self.fm.surface.wl >= 940.0) & (self.fm.surface.wl <= 1080.0)
+
+                w_start, w_end = self.fm.surface.wl[gidx][0], self.fm.surface.wl[gidx][-1]
+                r_start, r_end = rfl0[gidx][0], rfl0[gidx][-1]
+
+                continuum = r_start + (rfl0[gidx] - r_start) * (self.fm.surface.wl[gidx] - w_start) / (w_end - w_start)
+                area = float(np.trapezoid((continuum - rfl0[gidx]) / np.maximum(continuum, eps), self.fm.surface.wl[gidx]))
+
+                # 50-1200 to give some reasonable space away from the edges of the LUT (30-1500)
+                x0_surface[self.fm.surface.grain_idx] = min(max(50.0, float(5.256 * (area ** 2) - 7.817 * area + 19.295)), 1200.0)
+
+
+            # Round up all of the initial guesses
+            x0 = np.concatenate([x0_surface, x0_atmosphere, x0_instrument])
             x0 = x0[self.inds_free]
-
-            # Find the full state vector with bounds checked
             x = self.full_statevector(x0)
 
             # Regardless of anything we did for the heuristic guess, bring the
