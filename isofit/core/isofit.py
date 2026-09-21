@@ -139,20 +139,24 @@ class Isofit:
         )
         del rdn
 
+        #row_column = "134,189"
+        #row_column = "41,364"
+        #row_column = "72,140"
+
         # Handle case where you only want to run part of an image
         # TODO Clean this, not sure if currently functioning.
         if row_column is not None:
             ranges = row_column.split(",")
             if len(ranges) == 1:
-                self.rows, self.cols = [int(ranges[0])], None
-            if len(ranges) == 2:
-                row_start, row_end = ranges
-                self.rows, self.cols = range(int(row_start), int(row_end)), None
+                self.rows, self.cols = [int(ranges[0])], [0]
+            elif len(ranges) == 2:
+                row_idx, col_idx = ranges
+                self.rows, self.cols = [int(row_idx)], [int(col_idx)]
             elif len(ranges) == 4:
                 row_start, row_end, col_start, col_end = ranges
                 self.rows = range(int(row_start), int(row_end) + 1)
                 self.cols = range(int(col_start), int(col_end) + 1)
-
+    
         # Form the row-column pairs (pixels to run)
         # Need to allocate cols of index_pairs together
         # to make them memory contiguous

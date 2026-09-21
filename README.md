@@ -26,7 +26,7 @@ pip install -e .
 
 ## Change log
 
-- 21 September 2026: Update AOD prior to 0.05 +/- 0.005. Bring in fsnow, grain size, water vapor heuristics prior to OE for small speed/stability gain.
+- 21 September 2026: Update AOD prior to 0.05 +/- 0.005. Bring in fsnow, grain size, cosi, water vapor heuristics prior to OE for small speed/stability gain. Decrease ftol from 0.01 to 1e-7.
 
 - 18 September 2026: Bring in some prior beliefs about the static cos(i) from the DEM (Dozier et al., 2022). This is a function of per-pixel slope and aspect uncertainties.
 

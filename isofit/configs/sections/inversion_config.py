@@ -146,9 +146,9 @@ class LeastSquaresConfig(BaseConfigSection):
         Default is None, which disables termination from this criteria."""
 
         self._ftol_type = float
-        self.ftol = 0.01
+        self.ftol = 1e-7
         """float: Tolerance for termination by the change of the cost function.
-        Default is 0.01"""
+        Default is 1e-7"""
 
         self._gtol_type = float
         self.gtol = None

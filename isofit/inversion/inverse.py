@@ -354,6 +354,11 @@ class Inversion:
                 x0_surface[self.fm.surface.grain_idx] = min(max(50.0, float(5.256 * (area ** 2) - 7.817 * area + 19.295)), 1200.0)
 
 
+            # Set the cos(i) init based on the static DEM
+            if hasattr(self.fm.surface, 'cos_i_idx') and self.fm.surface.cos_i_idx is not None:
+                x0_surface[self.fm.surface.cos_i_idx] = min(max(0.01, float(geom.cos_i_static)), 1.0)
+
+
             # Round up all of the initial guesses
             x0 = np.concatenate([x0_surface, x0_atmosphere, x0_instrument])
             x0 = x0[self.inds_free]
@@ -408,6 +413,47 @@ class Inversion:
                 costs.append(9e99)
 
         final_solution = np.array(solutions[np.argmin(costs)])
+
+        test=False
+        if test:
+            import matplotlib.pyplot as plt
+            trajectory = np.array(trajectory)
+            n_iter, n_state = trajectory.shape
+            state_names = self.fm.statevec if hasattr(self.fm, "statevec") else [f"State {i}" for i in range(n_state)]
+
+            n_cols = 3
+            n_rows = int(np.ceil(n_state / n_cols))
+
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 3 * n_rows), sharex=True)
+            axes = np.atleast_1d(axes).flatten()
+
+            iterations = np.arange(n_iter)
+
+            for i in range(n_state):
+                ax = axes[i]
+                ax.plot(
+                    iterations,
+                    trajectory[:, i],
+                    marker="o",
+                    linestyle="-",
+                    color="royalblue",
+                    linewidth=1.5,
+                    markersize=4,
+                )
+                ax.set_title(str(state_names[i]), fontsize=10, fontweight="bold")
+                ax.set_ylabel("Value", fontsize=9)
+                ax.grid(True, linestyle="--", alpha=0.6)
+
+            for j in range(n_state, len(axes)):
+                fig.delaxes(axes[j])
+
+            for i, ax in enumerate(axes):
+                if i >= n_state - n_cols:
+                    ax.set_xlabel("Iteration", fontsize=9)
+
+            plt.tight_layout()
+            plt.show()
+
         return final_solution
 
     def forward_uncertainty(self, x, meas, geom):
