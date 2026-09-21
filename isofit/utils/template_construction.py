@@ -1108,7 +1108,7 @@ def load_climatology(
                 "bounds": [float(alr[0]), float(alr[1])],
                 "scale": 1,
                 "init": 0.05,
-                "prior_sigma": 0.1,
+                "prior_sigma": 0.005,
                 "prior_mean": 0.05,
             }
 
@@ -1128,7 +1128,7 @@ def load_climatology(
             "bounds": [float(alr[0]), float(alr[1])],
             "scale": 1,
             "init": 0.05,
-            "prior_sigma": 0.1,
+            "prior_sigma": 0.005,
             "prior_mean": 0.05,
         }
 
