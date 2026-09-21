@@ -26,7 +26,7 @@ pip install -e .
 
 ## Change log
 
-- 21 September 2026: Update AOD prior to 0.05 +/- 0.005. Bring in fsnow, grain size, cosi, water vapor heuristics prior to OE for small speed/stability gain. Decrease ftol from 0.01 to 1e-7.
+- 21 September 2026: Update AOD prior to 0.05 +/- 0.005. Bring in fsnow, grain size, cosi, water vapor heuristics prior to OE for small speed/stability gain. Decrease ftol from 0.01 to 1e-7 (19 spectra/sec/core).
 
 - 18 September 2026: Bring in some prior beliefs about the static cos(i) from the DEM (Dozier et al., 2022). This is a function of per-pixel slope and aspect uncertainties.
 
@@ -34,7 +34,7 @@ pip install -e .
 
 - 16 September 2026: Adding sqrt transformation for grain radius to reduce interpolation error
 
-- 10 September 2026: Integrated analytical Jacobian to account for cos_i, instead of relying on numerical, 2-point method (EMIT speed test: 11.22 spectra/sec to 20.99 spectra/sec). Also, fixed bug to assign average rfl to nodata for adjacency calc (prior to aggregating). 
+- 10 September 2026: Integrated analytical Jacobian to account for cos_i, instead of relying on numerical, 2-point method (EMIT speed test: 11.22 spectra/sec/core to 20.99 spectra/sec/core). Also, fixed bug to assign average rfl to nodata for adjacency calc (prior to aggregating). 
 
 - 9 September 2026: ISOFIT PR-1026, inversion windows patch (EMIT)
 
