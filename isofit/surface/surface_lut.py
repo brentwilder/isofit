@@ -79,6 +79,8 @@ R_DD_ALIASES = [
 # Wavelength Key
 WL_ALIASES = ["wvl", "wl", "wavelength"]
 
+MIN_DISORT_COSI=0.05
+
 
 class LUTSurface(Surface):
     """A model of the surface based on an N-dimensional lookup table
@@ -337,6 +339,7 @@ class LUTSurface(Surface):
             cos_i = x_surface[self.cos_i_idx]
         else:
             cos_i = geom.cos_i
+        cos_i = max(MIN_DISORT_COSI, cos_i)
 
         # solar zenith, view zenith, and relative azimuth are optional indicies
         if self.sza_idx is not None:
