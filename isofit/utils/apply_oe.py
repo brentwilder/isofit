@@ -736,7 +736,7 @@ def apply_oe(
         # run H2O grid as necessary
         if not exists(envi_header(h2o_path)) or not exists(h2o_path):
             # Write the presolve connfiguration file
-            h2o_grid = np.linspace(0.2, max_water - 0.01, 10).round(2)
+            h2o_grid = np.linspace(0.2, max_water - 0.01, 3).round(2)
             logging.info(f"Pre-solve H2O grid: {h2o_grid}")
             logging.info("Writing H2O pre-solve configuration file.")
 
@@ -780,6 +780,7 @@ def apply_oe(
         p95 = np.percentile(h2o_est[h2o_est > lut_params.h2o_min], 98)
 
         margin = (p95 - p05) * 0.5
+        margin = max(margin, lut_params.h2o_spacing)
         h2o_lut_min = max(lut_params.h2o_min, p05 - margin)
         h2o_lut_max = min(max_water, max(lut_params.h2o_min, p95 + margin))
         # This logic ensures range[1] - range[0] > spacing
