@@ -504,7 +504,7 @@ class IO:
         self.current_input_data.meas = meas
 
         if self.current_input_data.meas is None or np.all(
-            self.current_input_data.meas < -49
+            self.current_input_data.meas <= 0
         ):
             return None
 

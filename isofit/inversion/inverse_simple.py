@@ -26,6 +26,7 @@ from scipy.interpolate import interp1d
 from scipy.optimize import least_squares, minimize
 from scipy.optimize import minimize_scalar as min1d
 
+from isofit.atmosphere.atmosphere import modtran_water_upperbound_polynomials
 from isofit.core import units
 from isofit.core.common import emissive_radiance, eps
 from isofit.core.forward import ForwardModel
@@ -128,8 +129,8 @@ def heuristic_atmosphere(
         # would optimize the continuum-relative correction
         p = interp1d(h2os, areas)
         bounds = (h2os[0] + 0.001, h2os[-1] - 0.001)
-        best = min1d(lambda h: abs(p(h)), bounds=bounds, method="bounded")
-        x_new[ind_sv] = best.x
+        best = min1d(lambda h: abs(p(h)), bounds=bounds, method="bounded")   
+        x_new[ind_sv] = min(best.x, modtran_water_upperbound_polynomials()["ATM_MIDLAT_WINTER"](geom.surface_elevation_km))
 
     return x_new
 

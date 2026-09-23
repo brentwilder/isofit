@@ -273,7 +273,11 @@ class SnowWorker(object):
         self.uncert = envi.open(envi_header(paths.uncert_working_path), paths.uncert_working_path).open_memmap(interleave="bip")
         
         self.svf = envi.open(envi_header(paths.svf_working_path), paths.svf_working_path).open_memmap(interleave="bip").squeeze().copy()
-        self.canopy = envi.open(envi_header(veg_fraction_file), veg_fraction_file).open_memmap(interleave="bip").squeeze().copy()
+
+        try:
+            self.canopy = envi.open(envi_header(veg_fraction_file), veg_fraction_file).open_memmap(interleave="bip").squeeze().copy()
+        except:
+            self.canopy = np.zeros_like(self.svf)
 
         # NOTE a lot of the times these canopy will have nan for non-vegetated areas
         # and so we will populate this with zeros

@@ -998,7 +998,7 @@ def apply_oe(
                 os.remove(f)
 
     # Generate snow outputs
-    if albedo_lut is not None and veg_fraction_file is not None:
+    if albedo_lut is not None:
         snow_model_outputs(input_loc=input_loc,
                            input_obs=input_obs,
                            paths=paths,
