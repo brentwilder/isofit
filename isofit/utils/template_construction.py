@@ -787,7 +787,7 @@ def build_config(
         else:
             state_output_path = paths.state_subs_path
             posterior_output_path = paths.uncert_subs_path
-            rfl_output_path = paths.rfl_subs_path
+            rfl_output_path = None
             bgrfl_input_path = paths.bgrfl_subs_path
 
     else:
@@ -805,7 +805,7 @@ def build_config(
         else:
             state_output_path = paths.state_working_path
             posterior_output_path = paths.uncert_working_path
-            rfl_output_path = paths.rfl_working_path
+            rfl_output_path = None
             bgrfl_input_path = paths.bgrfl_working_path
 
     input_config = make_input_config(
