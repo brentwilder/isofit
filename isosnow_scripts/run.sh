@@ -58,6 +58,7 @@ VEG="/Users/bawilder/Documents/SNOW/EMIT/VEG_TESTING/modis_lakemary"
 ALBEDO="/Users/bawilder/Code/snow/LUT/EMIT_L3/EMIT_DISORT_20260828_ALBEDO_2.nc"
 
 # --prebuilt_lut="${LUT}" \
+# --veg_fraction_file="${VEG}" \
 
 # Run iso
 isofit apply_oe "${rdn_file}" "${loc_file}" "${obs_file}" "${OUTPUT_DIR}" "${SENSOR}" \
@@ -69,7 +70,6 @@ isofit apply_oe "${rdn_file}" "${loc_file}" "${obs_file}" "${OUTPUT_DIR}" "${SEN
   --logging_level="${LOGGING}" \
   --surface_category="lut_surface" \
   --skyview_factor="${SKYVIEW}" \
-  --veg_fraction_file="${VEG}" \
   --albedo_lut="${ALBEDO}" \
   --use_background_rfl \
   --presolve

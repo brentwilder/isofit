@@ -943,7 +943,6 @@ def apply_oe(
             pass
 
     # Remove any other large temporary files created during ApplyOE
-    remove_bgrfl_file = False
     if remove_bgrfl_file:
         bgrfl_files_to_remove = [
             paths.bgrfl_working_path,

@@ -52,3 +52,21 @@ hypertrace-data/
 uv.lock
 .python-version
 .venv
+
+# snow albedo test
+isofit/test/emit_albedo_pairs/*
+
+!isofit/test/emit_albedo_pairs/*/
+!isofit/test/emit_albedo_pairs/*/*/
+isofit/test/emit_albedo_pairs/*/*/*
+!isofit/test/emit_albedo_pairs/*/*/data/
+!isofit/test/emit_albedo_pairs/*/*/data/**
+
+*_isofit.json
+*_isofit.json.tmpl
+*_modtran_tpl.json
+*_uncertainty.txt
+*eof.txt
+*surface.mat
+*model_discrepancy.mat
+*wavelengths.txt

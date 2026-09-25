@@ -272,10 +272,10 @@ class SnowWorker(object):
 
         self.uncert = envi.open(envi_header(paths.uncert_working_path), paths.uncert_working_path).open_memmap(interleave="bip")
         
-        self.svf = envi.open(envi_header(paths.svf_working_path), paths.svf_working_path).open_memmap(interleave="bip").squeeze().copy()
+        self.svf = envi.open(envi_header(paths.svf_working_path), paths.svf_working_path).open_memmap(interleave="bip")[:, :, 0].copy()
 
         try:
-            self.canopy = envi.open(envi_header(veg_fraction_file), veg_fraction_file).open_memmap(interleave="bip").squeeze().copy()
+            self.canopy = envi.open(envi_header(veg_fraction_file), veg_fraction_file).open_memmap(interleave="bip")[:, :, 0].copy()
         except:
             self.canopy = np.zeros_like(self.svf)
 
