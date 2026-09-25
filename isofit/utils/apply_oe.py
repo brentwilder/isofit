@@ -21,11 +21,9 @@ from isofit.atmosphere.atmosphere import modtran_water_upperbound_polynomials
 from isofit.core import isofit, units
 from isofit.core.common import envi_header
 from isofit.debug.resource_tracker import FileResources
-from isofit.utils import analytical_line as ALAlg
-from isofit.utils import empirical_line as ELAlg
+
 from isofit.utils import (
     extractions,
-    interpolate_spectra,
     multicomponent_classification,
     reducers,
     segment,
@@ -615,17 +613,6 @@ def apply_oe(
     else:
         uncorrelated_radiometric_uncertainty = UNCORRELATED_RADIOMETRIC_UNCERTAINTY
 
-    # Interpolate bad rdn data.
-    if interpolate_bad_rdn:
-        # if interpolate_inplace == True,
-        # paths.radiance_working_path = paths.radiance_interp_path
-        interpolate_spectra(
-            paths.radiance_working_path,
-            paths.radiance_interp_path,
-            inplace=interpolate_inplace,
-            logfile=log_file,
-        )
-        paths.radiance_working_path = paths.radiance_interp_path
 
     # Multisurface Classification
     if classify_multisurface and not surface_class_file:
@@ -949,41 +936,14 @@ def apply_oe(
 
         if empirical_line:
             # Empirical line
-            logging.info("Empirical line inference")
-            ELAlg(
-                reference_radiance_file=paths.rdn_subs_path,
-                reference_reflectance_file=paths.rfl_subs_path,
-                reference_uncertainty_file=paths.uncert_subs_path,
-                reference_locations_file=paths.loc_subs_path,
-                segmentation_file=paths.lbl_working_path,
-                input_radiance_file=paths.radiance_working_path,
-                input_locations_file=paths.loc_working_path,
-                output_reflectance_file=paths.rfl_working_path,
-                output_uncertainty_file=paths.uncert_working_path,
-                isofit_config=paths.isofit_full_config_path,
-                nneighbors=nneighbors[0],
-                n_cores=n_cores,
-                segmentation_size=segmentation_size,
-            )
+            logging.info("Empirical line inference not implemented.")
+            pass
         elif analytical_line:
-            logging.info("Analytical line inference")
-            ALAlg(
-                paths.radiance_working_path,
-                paths.loc_working_path,
-                paths.obs_working_path,
-                working_directory,
-                output_rfl_file=paths.rfl_working_path,
-                output_unc_file=paths.uncert_working_path,
-                skyview_factor_file=paths.svf_working_path,
-                bgrfl_file=paths.bgrfl_working_path,
-                loglevel=logging_level,
-                logfile=log_file,
-                n_atm_neighbors=nneighbors,
-                n_cores=n_cores,
-                smoothing_sigma=atm_sigma,
-                segmentation_size=segmentation_size,
-            )
+            logging.info("Analytical line inference not implemented.")
+            pass
+
     # Remove any other large temporary files created during ApplyOE
+    remove_bgrfl_file = False
     if remove_bgrfl_file:
         bgrfl_files_to_remove = [
             paths.bgrfl_working_path,
