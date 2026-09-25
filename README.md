@@ -26,6 +26,8 @@ pip install -e .
 
 ## Change log
 
+- 25 September 2026: Uploaded broadband albedo tower data for use as a benchmark
+
 - 22 September 2026: ISOFIT PR-1035, water vapor patch for presolve
 
 - 21 September 2026: Update AOD prior to 0.05 +/- 0.005. Bring in fsnow, grain size, cosi, water vapor heuristics prior to OE for small speed/stability gain. Decrease ftol from 0.01 to 1e-7 (19 spectra/sec/core).
