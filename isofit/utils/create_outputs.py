@@ -12,7 +12,7 @@ from isofit.core.common import VectorInterpolator, eps
 
 # Empirical threshold for limiting to high quality data
 # TODO more testing to determine if this is the best value to use 
-FSNOW_THRESHOLD = 0.75
+FSNOW_THRESHOLD = 0.35
 
 # Factor for VZA-canopy adjustment for tree type
 B_R=2.7
