@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-
-n_cores=12
+max_jobs=4
 
 SENSOR="emit"
 wavelength_file="/Users/bawilder/Code/isofit-snow/emit/emit-wave.txt"
@@ -13,9 +12,6 @@ LOGGING="INFO"
 ALBEDO="/Users/bawilder/Code/snow/LUT/EMIT_L3/EMIT_DISORT_20260828_ALBEDO_2.nc"
 
 ALBEDO_PAIRS_DIR="/Users/bawilder/Code/isofit-PRs/isofit/test/emit_albedo_pairs"
-
-
-
 
 
 
@@ -44,21 +40,26 @@ for site_dir in "$ALBEDO_PAIRS_DIR"/*; do
         loc_file="${rdn_file}_LOC"
         obs_file="${rdn_file}_OBS"
         skyview_file="${data_dir}/sky_view_factor"
-
         OUTPUT_DIR="$date_dir"
 
         isofit apply_oe "${rdn_file}" "${loc_file}" "${obs_file}" "${OUTPUT_DIR}" "${SENSOR}" \
           --surface_path="${SURFACE_CONFIG_DIR}" \
           --wavelength_path="${wavelength_file}" \
           --emulator_base="${EMULATOR_PATH}" \
-          --n_cores=${n_cores} \
+          --n_cores=1 \
           --atmosphere_type="${ATMOS}" \
           --logging_level="${LOGGING}" \
           --surface_category="lut_surface" \
           --skyview_factor="${skyview_file}" \
           --albedo_lut="${ALBEDO}" \
-          --use_background_rfl
+          --use_background_rfl &
+
+        while [ $(jobs -r | wc -l) -ge $max_jobs ]; do
+            sleep 1
+        done
     done
 done
+
+wait
 
 echo "Done."

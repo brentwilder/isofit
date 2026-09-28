@@ -99,7 +99,9 @@ class Geometry:
             d_dphi = np.sin(theta_s) * np.sin(theta_topo) * np.sin(phi_s - phi_topo)
             
             self.cosi_prior_sigma = np.sqrt((d_dtheta * slope_sigma)**2 + (d_dphi * aspect_sigma)**2)
-            self.cosi_prior_mean = self.cos_i_static
+            
+            #self.cosi_prior_mean = self.cos_i_static
+            self.cosi_prior_mean = np.cos(np.radians(self.solar_zenith))
 
             # To be safe, setting a min uncert of 0.05 so we don't bias our retrieval
             self.cosi_prior_sigma = min(0.05, self.cosi_prior_sigma)

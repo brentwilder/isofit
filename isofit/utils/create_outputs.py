@@ -12,7 +12,8 @@ from isofit.core.common import VectorInterpolator, eps
 
 # Empirical threshold for limiting to high quality data
 # TODO more testing to determine if this is the best value to use 
-FSNOW_THRESHOLD = 0.35
+# For now this is set to 0 so it is unused, but need to revisit this.
+FSNOW_THRESHOLD = 0.0
 
 # Factor for VZA-canopy adjustment for tree type
 B_R=2.7
@@ -463,7 +464,7 @@ class SnowWorker(object):
             # 2. gaussian error distribution
             # 3. local linearity
             for i, idx_s in enumerate([self.total_sidx, self.dir_sidx, self.diff_sidx, self.vis_sidx, self.ir_sidx]):
-                output_snow_uncert[r, c, idx_s] = np.sqrt(np.sum(((d[i * 8 : (i + 1) * 8]) * u) ** 2))
+                output_snow_uncert[r, c, idx_s] = np.sqrt(np.sum(((d[i * len(u) : (i + 1) * len(u)]) * u) ** 2))
 
 
         write_bil_chunk(

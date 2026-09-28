@@ -136,7 +136,7 @@ class LeastSquaresConfig(BaseConfigSection):
         """str: Optimzation method to use. Default 'trf'."""
 
         self._max_nfev_type = int
-        self.max_nfev = 20
+        self.max_nfev = 100
         """int: Maximum number of function evaluations before the termination. 
         If None (default), the value is chosen automatically. Default 20."""
 
@@ -147,8 +147,7 @@ class LeastSquaresConfig(BaseConfigSection):
 
         self._ftol_type = float
         self.ftol = 1e-7
-        """float: Tolerance for termination by the change of the cost function.
-        Default is 1e-7"""
+        """float: Tolerance for termination by the change of the cost function."""
 
         self._gtol_type = float
         self.gtol = None

@@ -109,7 +109,7 @@ class Inversion:
         # Set least squares params that come from the forward model
         self.least_squares_params = {
             "method": "trf",
-            "max_nfev": 20,
+            "max_nfev": 100,
             "bounds": (
                 self.fm.bounds[0][self.inds_free],
                 self.fm.bounds[1][self.inds_free],
@@ -143,17 +143,34 @@ class Inversion:
         Sa_inv = self.fm.Sa_inv_state.copy()
         Sa_inv_sqrt = self.fm.Sa_inv_sqrt_state.copy()
 
-        if hasattr(geom, "cosi_prior_sigma") and "COS_I" in self.fm.statevec:
-            idx = self.fm.statevec.index("COS_I")
-            xa[idx] = geom.cosi_prior_mean
-            
-            var = geom.cosi_prior_sigma ** 2
-            Sa[idx, idx] = var
-            Sa_inv[idx, idx] = 1.0 / var
-            Sa_inv_sqrt[idx, idx] = 1.0 / geom.cosi_prior_sigma
+        if hasattr(geom, 'cosi_prior_sigma') and 'COS_I' in self.fm.statevec:
+          idx = self.fm.statevec.index('COS_I')
+          xa[idx] = geom.cosi_prior_mean
+
+          #f_snow = 1.0
+          #if (
+          #    hasattr(self.fm.surface, 'idx_fractional_data')
+          #    and self.fm.surface.idx_fractional_data is not None
+          #):
+          #  em_idxs = self.fm.surface.idx_em_rfls
+          #  if em_idxs and len(em_idxs) > 0:
+          #    z = x[em_idxs]
+          #    f_array = np.exp(z) / np.sum(np.exp(z))
+          #    f_snow = f_array[0] 
+
+          # TODO to continue testing ways to improve mixed pixel
+          #effective_sigma = 1e-6
+          effective_sigma = geom.cosi_prior_sigma
+          #effective_sigma = geom.cosi_prior_sigma * max(1e-6, np.cos((np.pi / 2.0) * (1.0 - f_snow))**100)
+          #if f_snow < 0.75:
+          #    effective_sigma = 1e-6
+
+          var = effective_sigma**2
+          Sa[idx, idx] = var
+          Sa_inv[idx, idx] = 1.0 / var
+          Sa_inv_sqrt[idx, idx] = 1.0 / effective_sigma
 
         return xa, Sa, Sa_inv, Sa_inv_sqrt
-    
 
     def calc_posterior(self, x, geom, meas):
         """Calculate posterior distribution of state vector. This depends
@@ -174,7 +191,8 @@ class Inversion:
         #    K.T @ K
         #) 
         #S_hat = np.linalg.pinv(K.T.dot(Seps_inv).dot(K) + Sa_inv)
-        S_hat = np.linalg.pinv(K.T.dot(K) + Sa_inv)
+        S_hat = np.linalg.pinv(K.T.dot(K) + Sa_inv) # produces slightly higher error than above, sticking with this even thoguh not fuly corect?
+
 
         G = S_hat.dot(K.T).dot(Seps_inv)
 
@@ -359,6 +377,7 @@ class Inversion:
                 x0_surface[self.fm.surface.cos_i_idx] = min(max(0.01, float(geom.cos_i_static)), 1.0)
 
 
+
             # Round up all of the initial guesses
             x0 = np.concatenate([x0_surface, x0_atmosphere, x0_instrument])
             x0 = x0[self.inds_free]
@@ -453,6 +472,48 @@ class Inversion:
 
             plt.tight_layout()
             plt.show()
+
+
+
+
+
+
+
+            # Matrix -A
+            x_final = self.full_statevector(xopt.x)
+            K_full = self.fm.K(x_final, geom)
+            K = K_full[np.ix_(self.winidx, self.inds_free)]
+            Seps = self.fm.Seps(x_final, meas, geom)
+            Seps = Seps[np.ix_(self.winidx, self.winidx)]
+            Seps_inv = svd_inv(Seps, hashtable=self.hashtable, max_hash_size=self.max_table_size)
+            xa_free, Sa_free, Sa_free_inv, Sa_free_inv_sqrt = self.calc_conditional_prior(xopt.x, geom)
+            S_hat = np.linalg.pinv(K.T.dot(Seps_inv).dot(K) + Sa_free_inv)
+            G = S_hat.dot(K.T).dot(Seps_inv)
+            A = G @ K
+
+            diag_A = np.diag(A)
+            state_names = np.array(self.fm.statevec)[self.inds_free]
+
+            for name, val in zip(state_names, diag_A):
+                print(f'  {name:20s}: {val:.4f}')
+
+            plt.figure(figsize=(9, 8))
+            plt.imshow(A, cmap='coolwarm', vmin=0, vmax=1)
+            plt.colorbar(label='Averaging Kernel')
+            plt.xticks(np.arange(len(state_names)), state_names, rotation=90, fontsize=9)
+            plt.yticks(np.arange(len(state_names)), state_names, fontsize=9)
+            plt.tight_layout()
+            plt.show()
+
+
+
+
+
+
+
+
+
+
 
         return final_solution
 

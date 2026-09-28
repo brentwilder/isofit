@@ -10,6 +10,9 @@ from isofit.test import albedo
 
 albedo_pairs_dir = "/Users/bawilder/Code/isofit-PRs/isofit/test/emit_albedo_pairs"
 
+
+
+
 obs_data_dict = {
     "dozier": albedo.dozier_obs_data,
     "sbsp": albedo.sbsp_obs_data,
