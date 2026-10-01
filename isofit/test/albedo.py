@@ -1,5 +1,6 @@
 # Assumed error for net radiometer derived SW albedo
-ASSUMED_ERROR=0.02
+# Ref example: "SURFRAD-A National SurfaceRadiation Budget Network for Atmospheric Research"
+ASSUMED_ERROR=0.03
 
 
 # DOZIER
