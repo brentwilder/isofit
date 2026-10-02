@@ -25,6 +25,7 @@ import logging
 import multiprocessing
 import os
 from pathlib import Path
+from datetime import timedelta, date
 from types import SimpleNamespace
 
 import numpy as np
@@ -136,6 +137,13 @@ class BaseAtmosphere(Reader):
             i for i, v in enumerate(self.statevec_names) if v in possible_h2o_names
         ]
 
+        possible_aerosol_names = ["AOT", "AERFRAC"]
+        self.aerosol_i = [
+            i
+            for i, v in enumerate(self.statevec_names)
+            if any(name in v for name in possible_aerosol_names)
+        ]
+
         # Configure and exit flag
         self.configure_and_exit = self.config.configure_and_exit
 
@@ -227,6 +235,11 @@ class BaseAtmosphere(Reader):
             )
             iday = modtran_input.get("GEOMETRY", {}).get("IDAY")
             self.dayofyear = int(iday) if iday is not None else None
+            self.month = (
+                (date(2024, 1, 1) + timedelta(days=self.dayofyear - 1)).month
+                if self.dayofyear is not None
+                else 3
+            )
         else:
             Logger.warning(
                 "No template file provided, assuming atm profile: ATM_MIDLAT_SUMMER and"
@@ -234,6 +247,7 @@ class BaseAtmosphere(Reader):
             )
             self.atmosphere_type = "ATM_MIDLAT_SUMMER"
             self.dayofyear = 93
+            self.month = 3
 
         self.h2o_bounds_polynomial = modtran_water_upperbound_polynomials()[
             self.atmosphere_type
@@ -356,6 +370,13 @@ class BaseAtmosphere(Reader):
     def update_heuristic_prior_means(self, x_atmosphere, geom):
         xa = self.prior_mean.copy()
         xa[self.h2o_i] = x_atmosphere[self.h2o_i]
+
+        xa_aerosol, sa_aerosol = get_aerosol_initial_value(
+            elevation_m=units.km_to_m(geom.surface_elevation_km),
+            month=self.month,
+            latitude=geom.latitude,
+        )
+        xa[self.aerosol_i] = xa_aerosol
 
         return xa
 
@@ -704,3 +725,41 @@ def modtran_aot_lowerbound_polynomials() -> dict:
     }
 
     return polynomials
+
+
+def get_aerosol_initial_value(elevation_m: float, month: int, latitude: float) -> tuple:
+    """
+    Calculate the initial/interpolation value for aerosol parameters.
+
+    Daily average aeronet modeled/converted AOD @ 550 nm,
+    accessed on 2 October 2026 (via 440-870_Angstrom_Exponent). Data were binned by
+    elevation every 100 m, and season (summer or winter), then were modeled using
+    empirically derived rationale equations.
+
+    Winter model: mean r2=0.54 | sd r2: 0.40
+    Summer model: mean r2=0.58 | sd r2: 0.47
+
+    The output is a prior mean and standard deviation for AOD-550 with respect to elevation.
+    """
+
+    # Convert southern hemisphere to equivalent month bins used for the empirical model
+    if latitude < 0:
+        month = (month + 5) % 12 + 1
+
+    # Determine model to use (from NH assumes Oct-March is winter)
+    winter_model = False
+    if month >= 10 or month <= 3:
+        winter_model = True
+
+    # rational models
+    if winter_model:
+        mean_p = [0.21717769, -0.00141723]
+        std_p = [0.27790378, 0.00153833]
+    else:
+        mean_p = [0.23949483, 0.00075571]
+        std_p = [0.25179319, 0.00078042]
+
+    prior_mean = mean_p[0] / (1.0 + np.abs(mean_p[1]) * elevation_m)
+    prior_sd = std_p[0] / (1.0 + np.abs(std_p[1]) * elevation_m)
+
+    return prior_mean, prior_sd
