@@ -736,8 +736,8 @@ def get_aerosol_initial_value(elevation_m: float, month: int, latitude: float) -
     elevation every 100 m, and season (summer or winter), then were modeled using
     empirically derived rationale equations.
 
-    Winter model: mean r2=0.54 | sd r2: 0.40
-    Summer model: mean r2=0.58 | sd r2: 0.47
+    Winter model: mean r2=0.27 | sd r2: 0.47
+    Summer model: mean r2=0.17 | sd r2: 0.35
 
     The output is a prior mean and standard deviation for AOD-550 with respect to elevation.
     """
