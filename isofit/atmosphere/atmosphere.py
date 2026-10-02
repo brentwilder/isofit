@@ -760,6 +760,6 @@ def get_aerosol_initial_value(elevation_m: float, month: int, latitude: float) -
         std_p = [0.25179319, 0.00078042]
 
     prior_mean = mean_p[0] / (1.0 + np.abs(mean_p[1]) * elevation_m)
-    prior_sd = std_p[0] / (1.0 + np.abs(std_p[1]) * elevation_m)
+    prior_sd = max(std_p[0] / (1.0 + np.abs(std_p[1]) * elevation_m), 0.1)
 
     return prior_mean, prior_sd
