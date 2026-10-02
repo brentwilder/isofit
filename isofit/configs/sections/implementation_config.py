@@ -84,7 +84,7 @@ class ImplementationConfig(BaseConfigSection):
         """
 
         self._per_pixel_heuristic_prior_type = bool
-        self.per_pixel_heuristic_prior = True
+        self.per_pixel_heuristic_prior = False
         """bool: define prior mean setting scheme.
         True -> use per-pixel heuristic
         False -> Use image-wide "unverisal" value
