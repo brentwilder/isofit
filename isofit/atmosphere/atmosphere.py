@@ -731,13 +731,8 @@ def get_aerosol_initial_value(elevation_m: float, month: int, latitude: float) -
     """
     Calculate the initial/interpolation value for aerosol parameters.
 
-    Daily average aeronet modeled/converted AOD @ 550 nm,
-    accessed on 2 October 2026 (via 440-870_Angstrom_Exponent). Data were binned by
-    elevation every 100 m, and season (summer or winter), then were modeled using
-    empirically derived rationale equations.
-
-    Winter model: mean r2=0.27 | sd r2: 0.47
-    Summer model: mean r2=0.17 | sd r2: 0.35
+    Daily average aeronet modeled/converted AOD @ 550 nm,accessed on 2 October 2026 (via 440-870_Angstrom_Exponent). 
+    Data were binned by elevation every 25 m, and season (summer or winter), then were modeled using empirically derived relation.
 
     The output is a prior mean and standard deviation for AOD-550 with respect to elevation.
     """
@@ -751,15 +746,23 @@ def get_aerosol_initial_value(elevation_m: float, month: int, latitude: float) -
     if month >= 10 or month <= 3:
         winter_model = True
 
-    # rational models
+    # Models
     if winter_model:
-        mean_p = [0.21717769, -0.00141723]
-        std_p = [0.27790378, 0.00153833]
+        # [slope, intercept]
+        mean_p = [-4.76469732e-05,  1.67560917e-01]
+        std_p = [-3.99706657e-05,  1.73532297e-01]
+        mean_min = 0.03
+        std_max = 0.15
+        std_min = 0.029
     else:
-        mean_p = [0.23949483, 0.00075571]
-        std_p = [0.25179319, 0.00078042]
+        mean_p = [-4.58483195e-05,  2.00096514e-01]
+        std_p = [-2.93409727e-05,  1.67152506e-01]
+        mean_min = 0.05
+        std_max = 0.15
+        std_min = 0.029
 
-    prior_mean = mean_p[0] / (1.0 + np.abs(mean_p[1]) * elevation_m)
-    prior_sd = min(std_p[0] / (1.0 + np.abs(std_p[1]) * elevation_m), 0.1)
+    prior_mean = max(mean_p[0] * elevation_m + mean_p[1], mean_min)
+    prior_sd = max( min(std_p[0] * elevation_m + std_p[1], std_max), std_min)
 
     return prior_mean, prior_sd
+
