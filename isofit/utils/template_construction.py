@@ -20,6 +20,7 @@ from isofit import __version__
 from isofit.atmosphere.atmosphere import (
     modtran_aot_lowerbound_polynomials,
     modtran_water_upperbound_polynomials,
+    get_aerosol_initial_value,
 )
 from isofit.core import units
 from isofit.core.common import envi_header, expand_path, json_load_ascii
@@ -893,21 +894,6 @@ def build_config(
     return config
 
 
-def get_aerosol_initial_value(range_min: float, range_max: float) -> float:
-    """Calculate the initial/interpolation value for aerosol parameters.
-    Somewhat arbitrary, but puts the starting value away from the lower bound,
-    but still low (assuming clear sky).
-
-    Args:
-        range_min: minimum value of the aerosol parameter range
-        range_max: maximum value of the aerosol parameter range
-
-    Returns:
-        float: the initial/interpolation value (min + 10% of range)
-    """
-    return (range_max - range_min) / 10.0 + range_min
-
-
 def get_lut_subset(vals):
     """Populate lut_names for the appropriate style of subsetting
 
@@ -1038,6 +1024,7 @@ def load_climatology(
     latitude: float,
     longitude: float,
     acquisition_datetime: datetime,
+    mean_elevation_km: float,
     lut_params: LUTConfig,
 ):
     """Load climatology data, based on location and configuration
@@ -1046,7 +1033,8 @@ def load_climatology(
         config_path: path to the base configuration directory for isofit
         latitude: latitude to set for the segment (mean of acquisition suggested)
         longitude: latitude to set for the segment (mean of acquisition suggested)
-        acquisition_datetime: datetime to use for the segment( mean of acquisition suggested)
+        acquisition_datetime: datetime to use for the segment(mean of acquisition suggested)
+        mean_elevation_km: elevation to set for the segement in km (mean of acquisition suggested)
         lut_params: parameters to use to define lut grid
 
     :Returns
@@ -1056,6 +1044,9 @@ def load_climatology(
             aerosol_model_path - A path to the location of the aerosol model to use with MODTRAN.
 
     """
+
+    month = acquisition_datetime.timetuple().tm_mon
+    year = acquisition_datetime.timetuple().tm_year
 
     aerosol_model_path = str(env.path("data", "aerosol_model.txt"))
     aerosol_state_vector = {}
@@ -1082,12 +1073,16 @@ def load_climatology(
         )
 
         if aerosol_lut is not None:
-            init_value = get_aerosol_initial_value(alr[0], alr[1])
+            init_value, prior_sigma = get_aerosol_initial_value(
+                elevation_m=units.km_to_m(mean_elevation_km),
+                month=month,
+                latitude=latitude,
+            )
             aerosol_state_vector["AERFRAC_{}".format(_a)] = {
                 "bounds": [float(alr[0]), float(alr[1])],
                 "scale": 1,
                 "init": float(init_value),
-                "prior_sigma": 0.1,
+                "prior_sigma": float(prior_sigma),
                 "prior_mean": float(init_value),
             }
 
@@ -1103,21 +1098,20 @@ def load_climatology(
     if aot_550_lut is not None:
         aerosol_lut_grid["AOT550"] = aot_550_lut.tolist()
         alr = [aerosol_lut_grid["AOT550"][0], aerosol_lut_grid["AOT550"][-1]]
-        init_value = get_aerosol_initial_value(alr[0], alr[1])
+        init_value, prior_sigma = get_aerosol_initial_value(
+            elevation_m=units.km_to_m(mean_elevation_km), month=month, latitude=latitude,
+        )
         aerosol_state_vector["AOT550"] = {
             "bounds": [float(alr[0]), float(alr[1])],
             "scale": 1,
             "init": float(init_value),
-            "prior_sigma": 0.1,
+            "prior_sigma": float(prior_sigma),
             "prior_mean": float(init_value),
         }
 
     logging.info("Loading Climatology")
     # If a configuration path has been provided, use it to get relevant info
     if config_path is not None:
-        month = acquisition_datetime.timetuple().tm_mon
-        year = acquisition_datetime.timetuple().tm_year
-
         with open(config_path, "r") as fin:
             for case in json.load(fin)["cases"]:
                 match = True
