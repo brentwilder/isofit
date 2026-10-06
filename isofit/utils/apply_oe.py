@@ -823,7 +823,6 @@ def apply_oe(
                 mean_latitude,
                 mean_longitude,
                 dt,
-                mean_elevation_km,
                 lut_params=lut_params,
             )
         )

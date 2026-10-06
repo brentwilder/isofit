@@ -257,9 +257,12 @@ class ForwardModel:
         Sa_surface, Sa_surf_inv_norm, Sa_surf_inv_sqrt_norm = self.surface.Sa(
             x_surface, geom
         )
+
         Sa_atmosphere = self.atmosphere.Sa()
-        Sa_atmosphere = self.atmosphere.update_heuristic_prior_sa(Sa_atmosphere, geom)
+        Sa_atmosphere, Sa_atm_inv_norm, Sa_atm_inv_sqrt_norm = self.atmosphere.update_heuristic_prior_sa(geom)
+
         Sa_instrument = self.instrument.Sa()
+
         Sa_state = block_diag(
             Sa_surface[:, :], Sa_atmosphere[:, :], Sa_instrument[:, :]
         )
@@ -272,13 +275,13 @@ class ForwardModel:
         # Compute the Sa inv and Sa inv sqrt for measurement
         Sa_inv_state = block_diag(
             Sa_surf_inv_norm / scale_surface**2,
-            self.atmosphere.Sa_inv_normalized / scale_atmosphere**2,
+            Sa_atm_inv_norm / scale_atmosphere**2,
             self.instrument.Sa_inv_normalized / scale_instrument**2,
         )
 
         Sa_inv_sqrt_state = block_diag(
             Sa_surf_inv_sqrt_norm / scale_surface,
-            self.atmosphere.Sa_inv_sqrt_normalized / scale_atmosphere,
+            Sa_atm_inv_sqrt_norm / scale_atmosphere,
             self.instrument.Sa_inv_sqrt_normalized / scale_instrument,
         )
 
