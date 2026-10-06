@@ -26,6 +26,8 @@ pip install -e .
 
 ## Change log
 
+- 6 October 2026: ISOFIT PR-1040, update numpy version pinning (from 1.20 to 2.0)
+
 - 25 September 2026: Uploaded broadband albedo tower data for use as a benchmark
 
 - 22 September 2026: ISOFIT PR-1035, water vapor patch for presolve
