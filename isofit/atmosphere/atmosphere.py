@@ -762,9 +762,7 @@ def aeronet_aod_prior(
 
     # Define bounds and params of polynomial
     elevation_m = min(max(elevation_m, 0.0), 6000.0)
-    p_mean = np.array(
-        [-8.79629630e-13, 1.34722222e-08, -7.05687831e-05, 1.51746032e-01]
-    )
+    p_mean = np.array([-8.79629630e-13, 1.34722222e-08, -7.05687831e-05, 1.51746032e-01])
     p_std = np.array([-2.77777778e-14, 4.08333333e-09, -3.81269841e-05, 1.19761905e-01])
 
     prior_mean = np.polyval(p_mean, elevation_m)
@@ -772,5 +770,9 @@ def aeronet_aod_prior(
 
     # Guard against out of bounds in LUT (allows for prebuilt LUT logic)
     prior_mean = max(min(prior_mean, aod_max), aod_min)
+
+    # For snow model, lock onto these priors a bit tighter because
+    # AOD over snow is challenging
+    prior_sd = prior_sd / 5 
 
     return prior_mean, prior_sd
