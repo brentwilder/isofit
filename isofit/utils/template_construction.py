@@ -22,6 +22,7 @@ from isofit.atmosphere.atmosphere import (
     modtran_water_upperbound_polynomials,
 )
 from isofit.core import units
+from isofit.atmosphere.atmosphere import aeronet_aod_prior
 from isofit.core.common import envi_header, expand_path, json_load_ascii
 from isofit.core.multistate import SurfaceMapping
 from isofit.data import env
@@ -736,6 +737,7 @@ def build_config(
     max_slope: float = 200.0,
     per_pixel_heuristic_prior: bool = False,
     use_background_rfl: bool = False,
+    elevation_km: float = 0.0,
 ) -> None:
     """Write an isofit config file for the main solve, using the specified pathnames and all given info
 
@@ -769,6 +771,7 @@ def build_config(
         terrain_style:                        style of terrain to use in the forward model - options are 'flat', 'dem', 'solved'
         max_slope:                            maximum terrain slope, used to inform minimum cos_i if terrain_style is not flat
         use_background_rfl:                   flag to determine which surface derivatives to use in OE
+        elevation_km:                         determined mean elevation in km for image used for AOD priors
     """
 
     if use_superpixels:
@@ -865,6 +868,7 @@ def build_config(
                 relative_azimuth_lut_grid=relative_azimuth_lut_grid,
                 to_sensor_zenith_lut_grid=to_sensor_zenith_lut_grid,
                 to_sun_zenith_lut_grid=to_sun_zenith_lut_grid,
+                elevation_km=elevation_km,
             ),
             "surface": make_surface_config(
                 surface_class_working_path=paths.surface_class_working_path,
@@ -908,21 +912,6 @@ def build_config(
     env.toTemplate(outfile, working_directory=paths.working_directory)
 
     return config
-
-
-def get_aerosol_initial_value(range_min: float, range_max: float) -> float:
-    """Calculate the initial/interpolation value for aerosol parameters.
-    Somewhat arbitrary, but puts the starting value away from the lower bound,
-    but still low (assuming clear sky).
-
-    Args:
-        range_min: minimum value of the aerosol parameter range
-        range_max: maximum value of the aerosol parameter range
-
-    Returns:
-        float: the initial/interpolation value (min + 10% of range)
-    """
-    return (range_max - range_min) / 10.0 + range_min
 
 
 def get_lut_subset(vals):
@@ -1059,6 +1048,7 @@ def load_climatology(
     config_path: str,
     latitude: float,
     longitude: float,
+    elevation_km: float,
     acquisition_datetime: datetime,
     lut_params: LUTConfig,
 ):
@@ -1068,6 +1058,7 @@ def load_climatology(
         config_path: path to the base configuration directory for isofit
         latitude: latitude to set for the segment (mean of acquisition suggested)
         longitude: latitude to set for the segment (mean of acquisition suggested)
+        elevation_km: determined mean elevation in km for image used for AOD priors
         acquisition_datetime: datetime to use for the segment( mean of acquisition suggested)
         lut_params: parameters to use to define lut grid
 
@@ -1104,12 +1095,15 @@ def load_climatology(
         )
 
         if aerosol_lut is not None:
+            prior_mean, prior_sigma = aeronet_aod_prior(
+                        elevation_km=elevation_km, aod_min=alr[0], aod_max=alr[1]
+                    )
             aerosol_state_vector["AERFRAC_{}".format(_a)] = {
                 "bounds": [float(alr[0]), float(alr[1])],
                 "scale": 1,
-                "init": 0.05,
-                "prior_sigma": 0.005,
-                "prior_mean": 0.05,
+                "init": prior_mean,
+                "prior_sigma": prior_sigma,
+                "prior_mean": prior_mean,
             }
 
             aerosol_lut_grid["AERFRAC_{}".format(_a)] = aerosol_lut.tolist()
@@ -1124,12 +1118,16 @@ def load_climatology(
     if aot_550_lut is not None:
         aerosol_lut_grid["AOT550"] = aot_550_lut.tolist()
         alr = [aerosol_lut_grid["AOT550"][0], aerosol_lut_grid["AOT550"][-1]]
+
+        prior_mean, prior_sigma = aeronet_aod_prior(
+            elevation_km=elevation_km, aod_min=alr[0], aod_max=alr[1]
+        )
         aerosol_state_vector["AOT550"] = {
             "bounds": [float(alr[0]), float(alr[1])],
             "scale": 1,
-            "init": 0.05,
-            "prior_sigma": 0.005,
-            "prior_mean": 0.05,
+            "init": prior_mean,
+            "prior_sigma": prior_sigma,
+            "prior_mean": prior_mean,
         }
 
     logging.info("Loading Climatology")
@@ -1529,6 +1527,7 @@ def make_atmosphere_config(
     relative_azimuth_lut_grid: np.array = None,
     to_sensor_zenith_lut_grid: np.array = None,
     to_sun_zenith_lut_grid: np.array = None,
+    elevation_km: float = 0.0,
 ):
     avc = np.sum(
         [
@@ -1672,7 +1671,11 @@ def make_atmosphere_config(
                     interp_value = template_means[dim_name]
                     source = "scene mean from template"
                 elif dim_name.startswith("AOT") or dim_name.startswith("AERFRAC"):
-                    interp_value = get_aerosol_initial_value(vmin, vmax)
+                    interp_value, _ = aeronet_aod_prior(
+                            elevation_km=elevation_km,
+                            aod_min=vmin,
+                            aod_max=vmax,
+                        )
                     source = "aerosol initial value formula"
                 else:
                     interp_value = (vmin + vmax) / 2.0
@@ -1760,7 +1763,11 @@ def make_atmosphere_config(
                         f"invalid value: {heuristic_val}. Treating as interpolation."
                     )
                     if dim_name.startswith("AOT") or dim_name.startswith("AERFRAC"):
-                        interp_value = get_aerosol_initial_value(vmin, vmax)
+                        interp_value, _ = aeronet_aod_prior(
+                                                    elevation_km=elevation_km,
+                                                    aod_min=vmin,
+                                                    aod_max=vmax,
+                                                    )
                     else:
                         interp_value = (vmin + vmax) / 2.0
                     lut_names[dim_name] = {"interp": interp_value}

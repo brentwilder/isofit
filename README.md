@@ -26,6 +26,8 @@ pip install -e .
 
 ## Change log
 
+- 7 October 2026: ISOFIT PR-1048, bring in AERONET per-pixel AOD550 prior mean and sigma
+
 - 6 October 2026: ISOFIT PR-1040, update numpy version pinning (from 1.20 to 2.0)
 
 - 25 September 2026: Uploaded broadband albedo tower data for use as a benchmark

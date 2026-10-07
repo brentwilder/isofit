@@ -139,9 +139,8 @@ class Inversion:
         x = self.full_statevector(x_free)
         xa = self.fm.xa(x, geom)
 
-        Sa = self.fm.Sa_state.copy()
-        Sa_inv = self.fm.Sa_inv_state.copy()
-        Sa_inv_sqrt = self.fm.Sa_inv_sqrt_state.copy()
+        Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa(x, geom)
+
 
         if hasattr(geom, 'cosi_prior_sigma') and 'COS_I' in self.fm.statevec:
           idx = self.fm.statevec.index('COS_I')
@@ -377,11 +376,15 @@ class Inversion:
                 x0_surface[self.fm.surface.cos_i_idx] = min(max(0.01, float(geom.cos_i_static)), 1.0)
 
 
-
             # Round up all of the initial guesses
             x0 = np.concatenate([x0_surface, x0_atmosphere, x0_instrument])
             x0 = x0[self.inds_free]
             x = self.full_statevector(x0)
+
+            # Heuristic prior means are based on initial guess
+            # Saving here will inherit the bounds check that comes before it.
+            if self.per_pixel_heuristic_prior:
+                self.fm.update_heuristic_prior_means(x, geom)
 
             # Regardless of anything we did for the heuristic guess, bring the
             # static preseed back into play (only does anything if inds_preseed
