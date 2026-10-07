@@ -141,33 +141,15 @@ class Inversion:
 
         Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa(x, geom)
 
-
-        if hasattr(geom, 'cosi_prior_sigma') and 'COS_I' in self.fm.statevec:
-          idx = self.fm.statevec.index('COS_I')
-          xa[idx] = geom.cosi_prior_mean
-
-          #f_snow = 1.0
-          #if (
-          #    hasattr(self.fm.surface, 'idx_fractional_data')
-          #    and self.fm.surface.idx_fractional_data is not None
-          #):
-          #  em_idxs = self.fm.surface.idx_em_rfls
-          #  if em_idxs and len(em_idxs) > 0:
-          #    z = x[em_idxs]
-          #    f_array = np.exp(z) / np.sum(np.exp(z))
-          #    f_snow = f_array[0] 
-
-          # TODO to continue testing ways to improve mixed pixel
+        #if hasattr(geom, 'cosi_prior_sigma') and 'COS_I' in self.fm.statevec:
+        #  idx = self.fm.statevec.index('COS_I')
+        #  xa[idx] = geom.cosi_prior_mean
           #effective_sigma = 1e-6
-          effective_sigma = geom.cosi_prior_sigma
-          #effective_sigma = geom.cosi_prior_sigma * max(1e-6, np.cos((np.pi / 2.0) * (1.0 - f_snow))**100)
-          #if f_snow < 0.75:
-          #    effective_sigma = 1e-6
-
-          var = effective_sigma**2
-          Sa[idx, idx] = var
-          Sa_inv[idx, idx] = 1.0 / var
-          Sa_inv_sqrt[idx, idx] = 1.0 / effective_sigma
+          #effective_sigma = geom.cosi_prior_sigma
+          #var = effective_sigma**2
+          #Sa[idx, idx] = var
+          #Sa_inv[idx, idx] = 1.0 / var
+          #Sa_inv_sqrt[idx, idx] = 1.0 / effective_sigma
 
         return xa, Sa, Sa_inv, Sa_inv_sqrt
 
