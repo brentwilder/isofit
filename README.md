@@ -34,11 +34,11 @@ pip install -e .
 
 - 22 September 2026: ISOFIT PR-1035, water vapor patch for presolve
 
-- 21 September 2026: Update AOD prior to 0.05 +/- 0.005. Bring in fsnow, grain size, cosi, water vapor heuristics prior to OE for small speed/stability gain. Decrease ftol from 0.01 to 1e-7 (19 spectra/sec/core).
+- 21 September 2026: Bring in fsnow, grain size, cosi, water vapor heuristics prior to OE for small speed/stability gain. Decrease ftol from 0.01 to 1e-7 (19 spectra/sec/core).
 
-- 18 September 2026: Bring in some prior beliefs about the static cos(i) from the DEM (Dozier et al., 2022). This is a function of per-pixel slope and aspect uncertainties. This is not implemented.
+- 18 September 2026: Bring in example code on some prior beliefs about the static cos(i) from the DEM (Dozier et al., 2022). This is a function of per-pixel slope and aspect uncertainties. This is not implemented, but sits in Geometry right now. Need to consider/test if we actually want to use prior info from DEM.
 
-- 17 September 2026: No longer computing Sa_inv every iteration because it is always the same in the snow model. Also, S_hat is fully corrected now, and utilizes Sa (allowing us to use informative priors if we need at any point).
+- 17 September 2026: S_hat is fully corrected now, and utilizes Sa (allowing us to use informative priors if we need at any point).
 
 - 16 September 2026: Adding sqrt transformation for grain radius to reduce interpolation error
 
