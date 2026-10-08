@@ -24,6 +24,11 @@ pip install -e .
 - The low-rank model files for PV, NPV, and Soil are in the `isosnow_data` folder and must be copied over into the home `~/.isofit/data` directory prior to running.
 
 
+## Current speed
+
+- 9.8 spectra/s/core
+
+
 ## Change log
 
 - 8 October 2026: Turn off EMIT EOFs for now.
@@ -36,7 +41,7 @@ pip install -e .
 
 - 22 September 2026: ISOFIT PR-1035, water vapor patch for presolve
 
-- 21 September 2026: Bring in fsnow, grain size, cosi, water vapor heuristics prior to OE for small speed/stability gain. Decrease ftol from 0.01 to 1e-7 (19 spectra/sec/core).
+- 21 September 2026: Bring in fsnow, grain size, cosi, water vapor heuristics prior to OE for small speed/stability gain. Decrease ftol from 0.01 to 1e-7.
 
 - 18 September 2026: Bring in example code on some prior beliefs about the static cos(i) from the DEM (Dozier et al., 2022). This is a function of per-pixel slope and aspect uncertainties. This is not implemented, but sits in Geometry right now. Need to consider/test if we actually want to use prior info from DEM.
 
@@ -44,7 +49,7 @@ pip install -e .
 
 - 16 September 2026: Adding sqrt transformation for grain radius to reduce interpolation error
 
-- 10 September 2026: Integrated analytical Jacobian to account for cos_i, instead of relying on numerical, 2-point method (EMIT speed test: 11.22 spectra/sec/core to 20.99 spectra/sec/core). Also, fixed bug to assign average rfl to nodata for adjacency calc (prior to aggregating). 
+- 10 September 2026: Integrated analytical Jacobian to account for cos_i, instead of relying on numerical, 2-point method. Also, fixed bug to assign average rfl to nodata for adjacency calc (prior to aggregating). 
 
 - 9 September 2026: ISOFIT PR-1026, inversion windows patch (EMIT)
 
