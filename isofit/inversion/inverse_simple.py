@@ -26,7 +26,7 @@ from scipy.interpolate import interp1d
 from scipy.optimize import least_squares, minimize
 from scipy.optimize import minimize_scalar as min1d
 
-from isofit.atmosphere.atmosphere import modtran_water_upperbound_polynomials
+from isofit.atmosphere.atmosphere import modtran_water_upperbound_polynomials, modtran_aot_lowerbound_polynomials
 from isofit.core import units
 from isofit.atmosphere.atmosphere import aeronet_aod_prior
 from isofit.core.common import emissive_radiance, eps
@@ -85,7 +85,8 @@ def heuristic_atmosphere(
         xa_aerosol, _ = aeronet_aod_prior(
             elevation_km=geom.surface_elevation_km,
         )
-        x_new[fm.atmosphere.aerosol_i] = xa_aerosol
+        x_new[fm.atmosphere.aerosol_i] = max(xa_aerosol, modtran_aot_lowerbound_polynomials()[fm.atmosphere.atmosphere_type](geom.surface_elevation_km))
+        
 
     # Band ratio retrieval of H2O
     if fm.atmosphere.h2o_i is not None:
@@ -131,7 +132,9 @@ def heuristic_atmosphere(
         bounds = (h2os[0] + 0.001, h2os[-1] - 0.001)
         best = min1d(lambda h: abs(p(h)), bounds=bounds, method="bounded")
 
-        x_new[fm.atmosphere.h2o_i] = best.x
+        # Check physical bounds
+        x_new[fm.atmosphere.h2o_i] = min(best.x, modtran_water_upperbound_polynomials()[fm.atmosphere.atmosphere_type](geom.surface_elevation_km))
+
 
     return x_new
 
