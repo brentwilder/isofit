@@ -771,8 +771,7 @@ def aeronet_aod_prior(
     # Guard against out of bounds in LUT (allows for prebuilt LUT logic)
     prior_mean = max(min(prior_mean, aod_max), aod_min)
 
-    # For snow model, lock onto these priors a bit tighter because
-    # AOD over snow is challenging
-    prior_sd = prior_sd / 5 
+    # For snow model, lock onto these priors a bit tighter because AOD over snow is challenging
+    prior_sd = prior_sd / 5
 
     return prior_mean, prior_sd
