@@ -2,7 +2,7 @@
 set -euxo pipefail
 
 # Number of parallel cores
-n_cores=12
+n_cores=10
 
 # instrument specific elements
 SENSOR="emit"
@@ -10,14 +10,14 @@ wavelength_file="/Users/bawilder/Code/isofit-snow/emit/emit-wave.txt"
 
 # RDN, LOC, and OBS file paths for hyperspectral data
 # light lake mary
-rdn_file="/Users/bawilder/Code/sister/output/test2/clip/emit20250327T212148_000"
-loc_file="/Users/bawilder/Code/sister/output/test2/clip/emit20250327T212148_000_LOC"
-obs_file="/Users/bawilder/Code/sister/output/test2/clip/emit20250327T212148_000_OBS"
+#rdn_file="/Users/bawilder/Code/sister/output/test2/clip/emit20250327T212148_000"
+#loc_file="/Users/bawilder/Code/sister/output/test2/clip/emit20250327T212148_000_LOC"
+#obs_file="/Users/bawilder/Code/sister/output/test2/clip/emit20250327T212148_000_OBS"
 
 # full lake mary
-#rdn_file="/Users/bawilder/Code/sister/output/test2/emit20250327T212148_000"
-#loc_file="/Users/bawilder/Code/sister/output/test2/emit20250327T212148_000_LOC"
-#obs_file="/Users/bawilder/Code/sister/output/test2/emit20250327T212148_000_OBS"
+rdn_file="/Users/bawilder/Code/sister/output/test2/emit20250327T212148_000"
+loc_file="/Users/bawilder/Code/sister/output/test2/emit20250327T212148_000_LOC"
+obs_file="/Users/bawilder/Code/sister/output/test2/emit20250327T212148_000_OBS"
 
 # full high mountain asia 
 #rdn_file="/Volumes/ExtremeSSD/Brent/20260318_highMountainAsia/SISTER/emit20230131T071421_000"
@@ -45,8 +45,8 @@ ATMOS="ATM_MIDLAT_WINTER"
 SURFACE_CONFIG_DIR="/Users/bawilder/Code/isofit-PRs/isosnow_scripts/surfacelut.json"
 
 # Output directory. Will be created if it doesn't exist.
-OUTPUT_DIR="/Users/bawilder/Code/isofit-PRs/local/test/20260902_snowmodel"
-#OUTPUT_DIR="/Users/bawilder/Code/isofit-PRs/local/test/20260910_snowmodel"
+#OUTPUT_DIR="/Users/bawilder/Code/isofit-PRs/local/test/20260902_snowmodel"
+OUTPUT_DIR="/Users/bawilder/Code/isofit-PRs/local/test/20260910_snowmodel"
 #OUTPUT_DIR="/Users/bawilder/Code/isofit-PRs/local/test/20260911_snowmodel"
 #OUTPUT_DIR="/Users/bawilder/Code/isofit-PRs/isofit/test/emit_albedo_pairs/dozier/20230423"
 
@@ -57,10 +57,10 @@ OUTPUT_DIR="/Users/bawilder/Code/isofit-PRs/local/test/20260902_snowmodel"
 LOGGING="INFO"
 
 # SKYVIEW
-SKYVIEW="/Users/bawilder/Code/sister/output/test2/clip/sky_view_factor"
+#SKYVIEW="/Users/bawilder/Code/sister/output/test2/clip/sky_view_factor"
 #SKYVIEW="slope"
 #SKYVIEW="/Users/bawilder/Code/isofit-PRs/isofit/test/emit_albedo_pairs/dozier/20230423/data/sky_view_factor"
-#SKYVIEW="/Users/bawilder/Code/isofit-PRs/local/test/20260910_snowmodel/skyview/sky_view_factor"
+SKYVIEW="/Users/bawilder/Code/isofit-PRs/local/test/20260910_snowmodel/skyview/sky_view_factor"
 
 
 # Ancillary data for postprocessing albedo

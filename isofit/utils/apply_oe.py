@@ -632,7 +632,8 @@ def apply_oe(
     logging.debug("Radiance working path:")
     logging.debug(paths.radiance_working_path)
     # Superpixel segmentation
-    if use_superpixels:
+    use_superpixels_slic = False
+    if use_superpixels_slic:
         if not exists(paths.lbl_working_path) or not exists(
             paths.radiance_working_path
         ):

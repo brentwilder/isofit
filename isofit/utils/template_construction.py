@@ -915,6 +915,21 @@ def build_config(
     return config
 
 
+def get_aerosol_initial_value(range_min: float, range_max: float) -> float:
+    """Calculate the initial/interpolation value for aerosol parameters.
+    Somewhat arbitrary, but puts the starting value away from the lower bound,
+    but still low (assuming clear sky).
+
+    Args:
+        range_min: minimum value of the aerosol parameter range
+        range_max: maximum value of the aerosol parameter range
+
+    Returns:
+        float: the initial/interpolation value (min + 10% of range)
+    """
+    return (range_max - range_min) / 10.0 + range_min
+
+
 def get_lut_subset(vals):
     """Populate lut_names for the appropriate style of subsetting
 
@@ -1102,9 +1117,9 @@ def load_climatology(
             aerosol_state_vector["AERFRAC_{}".format(_a)] = {
                 "bounds": [float(alr[0]), float(alr[1])],
                 "scale": 1,
-                "init": prior_mean,
-                "prior_sigma": prior_sigma,
-                "prior_mean": prior_mean,
+                "init": float(prior_mean),
+                "prior_sigma": float(prior_sigma),
+                "prior_mean": float(prior_mean),
             }
 
             aerosol_lut_grid["AERFRAC_{}".format(_a)] = aerosol_lut.tolist()
@@ -1119,16 +1134,15 @@ def load_climatology(
     if aot_550_lut is not None:
         aerosol_lut_grid["AOT550"] = aot_550_lut.tolist()
         alr = [aerosol_lut_grid["AOT550"][0], aerosol_lut_grid["AOT550"][-1]]
-
         prior_mean, prior_sigma = aeronet_aod_prior(
             elevation_km=elevation_km, aod_min=alr[0], aod_max=alr[1]
         )
         aerosol_state_vector["AOT550"] = {
             "bounds": [float(alr[0]), float(alr[1])],
             "scale": 1,
-            "init": prior_mean,
-            "prior_sigma": prior_sigma,
-            "prior_mean": prior_mean,
+            "init": float(prior_mean),
+            "prior_sigma": float(prior_sigma),
+            "prior_mean": float(prior_mean),
         }
 
     logging.info("Loading Climatology")
@@ -1765,10 +1779,10 @@ def make_atmosphere_config(
                     )
                     if dim_name.startswith("AOT") or dim_name.startswith("AERFRAC"):
                         interp_value, _ = aeronet_aod_prior(
-                                                    elevation_km=elevation_km,
-                                                    aod_min=vmin,
-                                                    aod_max=vmax,
-                                                    )
+                            elevation_km=elevation_km,
+                            aod_min=vmin,
+                            aod_max=vmax,
+                        )
                     else:
                         interp_value = (vmin + vmax) / 2.0
                     lut_names[dim_name] = {"interp": interp_value}

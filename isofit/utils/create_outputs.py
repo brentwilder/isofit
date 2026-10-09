@@ -87,9 +87,6 @@ STATE_BANDS = [
     "SOIL_LOWRANK",
     "AOT550",
     "H2OSTR",
-    "EOF_1",
-    "EOF_2",
-    "EOF_3",
 ]
 
 

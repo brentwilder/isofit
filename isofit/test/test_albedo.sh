@@ -12,7 +12,7 @@ SURFACE_CONFIG_DIR="/Users/bawilder/Code/isofit-PRs/isosnow_scripts/surfacelut.j
 LOGGING="INFO"
 ALBEDO="/Users/bawilder/Code/snow/LUT/EMIT_L3/EMIT_DISORT_20260828_ALBEDO_2.nc"
 
-ALBEDO_PAIRS_DIR="/Users/bawilder/Code/isofit-PRs/isofit/test/emit_albedo_pairs"
+ALBEDO_PAIRS_DIR="/Users/bawilder/Code/isofit-PRs/local/EMIT_SNOW/fig_v2/pairs_solved"
 
 
 
@@ -46,6 +46,7 @@ for site_dir in "$ALBEDO_PAIRS_DIR"/*; do
         skyview_file="${data_dir}/sky_view_factor"
 
         OUTPUT_DIR="$date_dir"
+        #          --per_pixel_heuristic_prior \
 
         isofit apply_oe "${rdn_file}" "${loc_file}" "${obs_file}" "${OUTPUT_DIR}" "${SENSOR}" \
           --surface_path="${SURFACE_CONFIG_DIR}" \

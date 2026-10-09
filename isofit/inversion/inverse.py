@@ -367,6 +367,7 @@ class Inversion:
             # Saving here will inherit the bounds check that comes before it.
             if self.per_pixel_heuristic_prior:
                 self.fm.update_heuristic_prior_means(x, geom)
+                self.fm.update_heuristic_prior_sa(x, geom)
 
             # Regardless of anything we did for the heuristic guess, bring the
             # static preseed back into play (only does anything if inds_preseed

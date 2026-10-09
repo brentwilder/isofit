@@ -26,14 +26,14 @@ pip install -e .
 
 ## Current speed
 
-- 9.8 spectra/s/core
+- 9.9 spectra/s/core
 
 
 ## Change log
 
-- 8 October 2026: Turn off EMIT EOFs for now.
+- 8 October 2026: Remove EMIT EOFs from state vector for now.
 
-- 7 October 2026: ISOFIT PR-1048, bring in AERONET per-pixel AOD550 prior mean and sigma. Snow model locks onto this a bit tighter than ISOFIT.
+- 7 October 2026: ISOFIT PR-1048, bring in AERONET per-pixel AOD550 prior mean and sigma.
 
 - 6 October 2026: ISOFIT PR-1040, update numpy version pinning (from 1.20 to 2.0)
 
@@ -41,7 +41,7 @@ pip install -e .
 
 - 22 September 2026: ISOFIT PR-1035, water vapor patch for presolve
 
-- 21 September 2026: Bring in fsnow, grain size, cosi, water vapor heuristics prior to OE for small speed/stability gain. Decrease ftol from 0.01 to 1e-7.
+- 21 September 2026: Decrease ftol from 0.01 to 1e-7.
 
 - 18 September 2026: Bring in example code on some prior beliefs about the static cos(i) from the DEM (Dozier et al., 2022). This is a function of per-pixel slope and aspect uncertainties. This is not implemented, but sits in Geometry right now. Need to consider/test if we actually want to use prior info from DEM.
 

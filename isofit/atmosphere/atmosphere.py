@@ -135,15 +135,10 @@ class BaseAtmosphere(Reader):
         self.h2o_i = [
             i for i, v in enumerate(self.statevec_names) if v in possible_h2o_names
         ]
-        
         self.h2o_name = self.statevec_names[self.h2o_i[0]] if self.h2o_i else None
 
         possible_aerosol_names = ["AOT", "AERFRAC"]
-        self.aerosol_i = [
-            i
-            for i, v in enumerate(self.statevec_names)
-            if any(name in v for name in possible_aerosol_names)
-        ]
+        self.aerosol_i = [i for i, v in enumerate(self.statevec_names) if v in possible_aerosol_names]
 
         # Configure and exit flag
         self.configure_and_exit = self.config.configure_and_exit
@@ -366,6 +361,10 @@ class BaseAtmosphere(Reader):
         xa = self.prior_mean.copy()
         xa[self.h2o_i] = x_atmosphere[self.h2o_i]
 
+    def update_heuristic_prior_means(self, x_atmosphere, geom):
+        xa = self.prior_mean.copy()
+        xa[self.h2o_i] = x_atmosphere[self.h2o_i]
+
         xa_aerosol, _ = aeronet_aod_prior(
             elevation_km=geom.surface_elevation_km,
         )
@@ -385,6 +384,7 @@ class BaseAtmosphere(Reader):
         Sa_inv_norm, Sa_inv_sqrt_norm = svd_inv_sqrt(Sa_atm_norm)
 
         return Sa_atmosphere, Sa_inv_norm, Sa_inv_sqrt_norm
+
 
     def xa(self, x_atmosphere, geom):
         """
@@ -770,8 +770,5 @@ def aeronet_aod_prior(
 
     # Guard against out of bounds in LUT (allows for prebuilt LUT logic)
     prior_mean = max(min(prior_mean, aod_max), aod_min)
-
-    # For snow model, lock onto these priors a bit tighter because AOD over snow is challenging
-    prior_sd = prior_sd / 5
 
     return prior_mean, prior_sd

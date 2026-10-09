@@ -221,6 +221,19 @@ class ForwardModel:
 
         return
 
+    def update_heuristic_prior_sa(self, x, geom):
+        """Save the pixel-specific prior to the geometry object"""
+
+        Sa_atmosphere, Sa_inv_norm, Sa_inv_sqrt_norm = self.atmosphere.update_heuristic_prior_sa(geom)
+
+        # Should be persist out of this function scope
+        geom.Sa_atmosphere = Sa_atmosphere
+        geom.Sa_atm_inv_norm = Sa_inv_norm
+        geom.Sa_atm_inv_sqrt_norm = Sa_inv_sqrt_norm
+
+        return
+    
+
     def heuristic_bounds(self, geom):
         """Save pixel-specific bounds. Currently only implemented for H2O"""
         # Would like to avoid if statement here
@@ -248,8 +261,7 @@ class ForwardModel:
         xa_atmosphere = self.atmosphere.xa(x_atmosphere, geom)
         xa_instrument = self.instrument.xa()
         return np.concatenate((xa_surface, xa_atmosphere, xa_instrument), axis=0)
-    
-    
+
     def Sa_heuristic(self, x, geom):
         """Calculate the prior covariance of the state vector (the
         concatenation of state vectors for the surface and the atmosphere).
@@ -263,31 +275,27 @@ class ForwardModel:
             x_surface, geom
         )
 
-        Sa_atmosphere, Sa_atm_inv_norm, Sa_atm_inv_sqrt_norm = (
-            self.atmosphere.update_heuristic_prior_sa(geom)
-        )
-
         Sa_instrument = self.instrument.Sa()
 
         Sa_state = block_diag(
-            Sa_surface[:, :], Sa_atmosphere[:, :], Sa_instrument[:, :]
+            Sa_surface[:, :], geom.Sa_atmosphere[:, :], Sa_instrument[:, :]
         )
 
         # per block variance scaling for normalization
         scale_surface = np.sqrt(np.mean(np.diag(Sa_surface[:, :])))
-        scale_atmosphere = np.sqrt(np.mean(np.diag(Sa_atmosphere[:, :])))
+        scale_atmosphere = np.sqrt(np.mean(np.diag(geom.Sa_atmosphere[:, :])))
         scale_instrument = np.sqrt(np.mean(np.diag(Sa_instrument[:, :])))
 
         # Compute the Sa inv and Sa inv sqrt for measurement
         Sa_inv_state = block_diag(
             Sa_surf_inv_norm / scale_surface**2,
-            Sa_atm_inv_norm / scale_atmosphere**2,
+            geom.Sa_atm_inv_norm / scale_atmosphere**2,
             self.instrument.Sa_inv_normalized / scale_instrument**2,
         )
 
         Sa_inv_sqrt_state = block_diag(
             Sa_surf_inv_sqrt_norm / scale_surface,
-            Sa_atm_inv_sqrt_norm / scale_atmosphere,
+            geom.Sa_atm_inv_sqrt_norm / scale_atmosphere,
             self.instrument.Sa_inv_sqrt_normalized / scale_instrument,
         )
 
