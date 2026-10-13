@@ -18,42 +18,6 @@ FSNOW_THRESHOLD = 0.0
 # Factor for VZA-canopy adjustment for tree type
 B_R=2.7
 
-# These terms are to ensure we stay within reasonable limits of the albedo LUT generated 
-# NOTE these can change if a new LUT is used
-ALBEDO_AOT_MIN = 0.01 + eps
-ALBEDO_AOT_MAX = 0.6 - eps
-
-ALBEDO_H2O_MIN = 0.05 + eps
-ALBEDO_H2O_MAX = 0.50001 - eps
-
-ALBEDO_ALT_MIN = 0.0 + eps
-ALBEDO_ALT_MAX = 5.0 - eps
-
-ALBEDO_ALT_MIN = 0.0 + eps
-ALBEDO_ALT_MAX = 5.0 - eps
-
-ALBEDO_GRAIN_MIN = 30.0 + eps
-ALBEDO_GRAIN_MAX = 1500.0 - eps
-
-ALBEDO_ALGAE_MIN = 0.0 + eps
-ALBEDO_ALGAE_MAX = 6e5 - eps
-
-ALBEDO_DUST_MIN = 0.0 + eps
-ALBEDO_DUST_MAX = 4000.0 - eps
-
-ALBEDO_LWC_MIN = 0.0 + eps
-ALBEDO_LWC_MAX = 25.0 - eps
-
-ALBEDO_SZA_MIN = 0.0 + eps
-ALBEDO_SZA_MAX = 70.0 - eps
-
-ALBEDO_COSI_MIN = 1e-3 + eps
-ALBEDO_COSI_MAX = 70.0 - eps
-
-ALBEDO_SVF_MIN = 0.5 + eps
-ALBEDO_SVF_MAX = 1.0 - eps
-
-
 # Outputs for the snow and snow_uncert files
 SNOW_BANDS = [
     "FSCA",
@@ -150,6 +114,35 @@ def snow_model_outputs(
 
     # Load Albedo LUT 
     ds = xr.load_dataset(albedo_lut)
+    
+    global ALBEDO_AOT_MIN, ALBEDO_AOT_MAX, ALBEDO_H2O_MIN, ALBEDO_H2O_MAX
+    global ALBEDO_ALT_MIN, ALBEDO_ALT_MAX, ALBEDO_GRAIN_MIN, ALBEDO_GRAIN_MAX
+    global ALBEDO_ALGAE_MIN, ALBEDO_ALGAE_MAX, ALBEDO_DUST_MIN, ALBEDO_DUST_MAX
+    global ALBEDO_LWC_MIN, ALBEDO_LWC_MAX, ALBEDO_SZA_MIN, ALBEDO_SZA_MAX
+    global ALBEDO_COSI_MIN, ALBEDO_COSI_MAX, ALBEDO_SVF_MIN, ALBEDO_SVF_MAX
+
+    ALBEDO_AOT_MIN = float(ds["aot"].min().values) + eps
+    ALBEDO_AOT_MAX = float(ds["aot"].max().values) - eps
+    ALBEDO_H2O_MIN = float(ds["h2o"].min().values) + eps
+    ALBEDO_H2O_MAX = float(ds["h2o"].max().values) - eps
+    ALBEDO_ALT_MIN = float(ds["altitude"].min().values) + eps
+    ALBEDO_ALT_MAX = float(ds["altitude"].max().values) - eps
+    ALBEDO_GRAIN_MIN = float(ds["grain_radius"].min().values) + eps
+    ALBEDO_GRAIN_MAX = float(ds["grain_radius"].max().values) - eps
+    ALBEDO_ALGAE_MIN = float(ds["algae_conc"].min().values) + eps
+    ALBEDO_ALGAE_MAX = float(ds["algae_conc"].max().values) - eps
+    ALBEDO_DUST_MIN = float(ds["dust_conc"].min().values) + eps
+    ALBEDO_DUST_MAX = float(ds["dust_conc"].max().values) - eps
+    ALBEDO_LWC_MIN = float(ds["lwc"].min().values) + eps
+    ALBEDO_LWC_MAX = float(ds["lwc"].max().values) - eps
+    ALBEDO_SZA_MIN = float(ds["toa_sza"].min().values) + eps
+    ALBEDO_SZA_MAX = float(ds["toa_sza"].max().values) - eps
+    ALBEDO_COSI_MIN = float(ds["cosi"].min().values) + eps
+    ALBEDO_COSI_MAX = float(ds["cosi"].max().values) - eps
+    ALBEDO_SVF_MIN = float(ds["svf"].min().values) + eps
+    ALBEDO_SVF_MAX = float(ds["svf"].max().values) - eps
+
+
     grid = [
         ds["aot"].values,
         ds["h2o"].values,
@@ -433,6 +426,7 @@ class SnowWorker(object):
             _grain_v_sqrt = np.sqrt(_grain_v)
 
             interp_g = self.G(np.array([_aot_v, _h2o_v, _alt_v, _grain_v_sqrt, _algae_v, _dust_v, _lwc_v, _sza_v, _cosi_v, _svf_v]))
+    
 
             a = interp_g[0:5]
             d = interp_g[5:]
