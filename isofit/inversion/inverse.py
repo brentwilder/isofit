@@ -141,15 +141,17 @@ class Inversion:
 
         Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa(x, geom)
 
-        #if hasattr(geom, 'cosi_prior_sigma') and 'COS_I' in self.fm.statevec:
-        #  idx = self.fm.statevec.index('COS_I')
-        #  xa[idx] = geom.cosi_prior_mean
-          #effective_sigma = 1e-6
-          #effective_sigma = geom.cosi_prior_sigma
-          #var = effective_sigma**2
-          #Sa[idx, idx] = var
-          #Sa_inv[idx, idx] = 1.0 / var
-          #Sa_inv_sqrt[idx, idx] = 1.0 / effective_sigma
+        #set_cosi = False
+        #if set_cosi:
+        #    if hasattr(geom, 'cosi_prior_sigma') and 'COS_I' in self.fm.statevec:
+        #        idx = self.fm.statevec.index('COS_I')
+        #        xa[idx] = geom.cosi_prior_mean
+        #        effective_sigma = 1e-4
+        #        #effective_sigma = geom.cosi_prior_sigma
+        #        var = effective_sigma**2
+        #        Sa[idx, idx] = var
+        #        Sa_inv[idx, idx] = 1.0 / var
+        #        Sa_inv_sqrt[idx, idx] = 1.0 / effective_sigma
 
         return xa, Sa, Sa_inv, Sa_inv_sqrt
 
@@ -315,49 +317,6 @@ class Inversion:
                                                  meas, 
                                                  geom)
 
-            rfl0, _ = invert_algebraic(self.fm, x0_surface, x0_atmosphere, x0_instrument, meas, geom)
-
-            green = rfl0[np.argmin(np.abs(self.fm.surface.wl - 550.0))]
-            swir = rfl0[np.argmin(np.abs(self.fm.surface.wl - 1640.0))]
-            ndsi = (green - swir) / (green + swir + eps)
-
-            # NDSI heuristic based on Lake Mary scene
-            # Fit: f_snow = 0.073 * exp(2.404 * NDSI) + 0.050
-            f_snow0 = min( max(0, float(0.073 * np.exp(2.404 * ndsi) + 0.050)) , 1)
-
-            n_endmembers = len(self.fm.surface.endmember_names) if hasattr(self.fm.surface, 'endmember_names') else 0
-            if n_endmembers > 0:
-                _rem_frac = max(eps, (1.0 - f_snow0) / n_endmembers)
-                softmax_vals = [np.log(max(f_snow0, eps))]
-                for _ in range(n_endmembers):
-                    softmax_vals.append(np.log(_rem_frac))
-                
-                for idx_em, val in zip(self.fm.surface.idx_em_rfls, softmax_vals):
-                    x0_surface[idx_em] = np.clip(val, -5.0, 5.0)
-
-
-
-            # Grain size heuristic based on contiuum removal at 1030 ice feature (Nolin & Dozier, 2000)
-            # NOTE: the estimate is a function of the DISORT LUT parameters/settings
-            if hasattr(self.fm.surface, 'grain_idx') and self.fm.surface.grain_idx is not None:
-            
-                gidx = (self.fm.surface.wl >= 940.0) & (self.fm.surface.wl <= 1080.0)
-
-                w_start, w_end = self.fm.surface.wl[gidx][0], self.fm.surface.wl[gidx][-1]
-                r_start, r_end = rfl0[gidx][0], rfl0[gidx][-1]
-
-                continuum = r_start + (rfl0[gidx] - r_start) * (self.fm.surface.wl[gidx] - w_start) / (w_end - w_start)
-                area = float(np.trapezoid((continuum - rfl0[gidx]) / np.maximum(continuum, eps), self.fm.surface.wl[gidx]))
-
-                # 50-1200 to give some reasonable space away from the edges of the LUT (30-1500)
-                x0_surface[self.fm.surface.grain_idx] = min(max(50.0, float(5.256 * (area ** 2) - 7.817 * area + 19.295)), 1200.0)
-
-
-            # Set the cos(i) init based on the static DEM
-            if hasattr(self.fm.surface, 'cos_i_idx') and self.fm.surface.cos_i_idx is not None:
-                x0_surface[self.fm.surface.cos_i_idx] = min(max(0.01, float(geom.cos_i_static)), 1.0)
-
-
             # Round up all of the initial guesses
             x0 = np.concatenate([x0_surface, x0_atmosphere, x0_instrument])
             x0 = x0[self.inds_free]
@@ -461,11 +420,7 @@ class Inversion:
 
 
 
-
-
-
-
-            # Matrix -A
+            # Matrix - A
             x_final = self.full_statevector(xopt.x)
             K_full = self.fm.K(x_final, geom)
             K = K_full[np.ix_(self.winidx, self.inds_free)]
@@ -490,14 +445,6 @@ class Inversion:
             plt.yticks(np.arange(len(state_names)), state_names, fontsize=9)
             plt.tight_layout()
             plt.show()
-
-
-
-
-
-
-
-
 
 
 

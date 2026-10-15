@@ -11,12 +11,12 @@ SURFACE_CONFIG_DIR="/Users/bawilder/Code/isofit-PRs/isosnow_scripts/surfacelut.j
 LOGGING="INFO"
 ALBEDO="/Users/bawilder/Code/snow/LUT/EMIT_L3/EMIT_DISORT_20260828_ALBEDO_2.nc"
 
-ALBEDO_PAIRS_DIR="/Users/bawilder/Code/isofit-PRs/local/EMIT_SNOW/fig_v2/pairs_cop"
+ALBEDO_PAIRS_DIR="/Users/bawilder/Code/isofit-PRs/local/EMIT_SNOW/fig_v2/pairs_alex"
 
 
 
 
-for site_dir in "$ALBEDO_PAIRS_DIR"/grandmesa; do
+for site_dir in "$ALBEDO_PAIRS_DIR"/*; do
     if [ ! -d "$site_dir" ]; then
         continue
     fi
@@ -54,7 +54,7 @@ for site_dir in "$ALBEDO_PAIRS_DIR"/grandmesa; do
           --n_cores=1 \
           --atmosphere_type="${ATMOS}" \
           --logging_level="${LOGGING}" \
-          --surface_category="lut_surface" \
+          --surface_category="kokhanovsky_snow_surface" \
           --skyview_factor="${skyview_file}" \
           --albedo_lut="${ALBEDO}" \
           --use_background_rfl &

@@ -30,6 +30,7 @@ from isofit.utils import (
 )
 from isofit.utils.skyview import skyview
 from isofit.utils.adjacency import process_background_data, approx_pixel_size
+from isofit.utils.create_outputs_aart import snow_model_outputs_aart
 from isofit.utils.create_outputs import snow_model_outputs
 
 EPS = 1e-6
@@ -632,8 +633,8 @@ def apply_oe(
     logging.debug("Radiance working path:")
     logging.debug(paths.radiance_working_path)
     # Superpixel segmentation
-    use_superpixels_slic = False
-    if use_superpixels_slic:
+    #use_superpixels_slic = False
+    if use_superpixels:
         if not exists(paths.lbl_working_path) or not exists(
             paths.radiance_working_path
         ):
@@ -878,7 +879,7 @@ def apply_oe(
 
         if presolve and use_background_rfl:
 
-            if surface_category == "lut_surface":
+            if surface_category == "lut_surface" or surface_category =="kokhanovsky_snow_surface":
                 use_slic_rfls = False
             else:
                 use_slic_rfls = True
@@ -960,17 +961,26 @@ def apply_oe(
                 os.remove(f)
 
     # Generate snow outputs
-    if albedo_lut is not None:
-        snow_model_outputs(input_loc=input_loc,
-                           input_obs=input_obs,
-                           paths=paths,
-                           veg_fraction_file=veg_fraction_file,
-                           albedo_lut=albedo_lut,
-                           dayofyear=dayofyear, 
-                           n_cores=n_cores,
-                           nodata_value=-9999)
+    snow_model_outputs_aart(input_loc=input_loc,
+                        input_obs=input_obs,
+                        paths=paths,
+                        veg_fraction_file=veg_fraction_file,
+                        modtran_file="/Volumes/ExtremeSSD/Brent/20260902_modtran_bluehookv3_with_h2o/modtran_blue_hook_v4_10nm.nc",
+                        dayofyear=dayofyear, 
+                        n_cores=n_cores,
+                        nodata_value=-9999)
 
-    
+    # Generate snow outputs
+    #snow_model_outputs(input_loc=input_loc,
+    #                    input_obs=input_obs,
+    #                    paths=paths,
+    #                    veg_fraction_file=veg_fraction_file,
+    #                    albedo_lut=albedo_lut,
+    #                    dayofyear=dayofyear, 
+    #                    n_cores=n_cores,
+    #                    nodata_value=-9999)
+    #
+
 
     logging.info("Done.")
     ray.shutdown()

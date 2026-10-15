@@ -185,16 +185,18 @@ class LUTSurface(Surface):
 
         for name in self.statevec_names:
             state_config = getattr(config.statevector, name)
-            self.init.append(state_config.get("init"))
-            self.bounds.append(state_config.get("bounds"))
-            self.scale.append(state_config.get("scale"))
-            self.mean.append(state_config.get("prior_mean"))
-            self.sigma.append(state_config.get("prior_sigma"))
+            self.init.append(float(state_config.get("init")))
+            bound_val = state_config.get("bounds")
+            self.bounds.append([float(bound_val[0]), float(bound_val[1])])
+            self.scale.append(float(state_config.get("scale")))
+            self.mean.append(float(state_config.get("prior_mean")))
+            self.sigma.append(float(state_config.get("prior_sigma")))
 
-        self.init = np.array(self.init)
-        self.scale = np.array(self.scale)
-        self.mean = np.array(self.mean)
-        self.sigma = np.array(self.sigma)
+        self.init = np.array(self.init, dtype=float)
+        self.bounds = np.array(self.bounds, dtype=float)
+        self.scale = np.array(self.scale, dtype=float)
+        self.mean = np.array(self.mean, dtype=float)
+        self.sigma = np.array(self.sigma, dtype=float)
 
         # Cache some important computations
         # NOTE for now this assumes no off diagonal elements
@@ -288,17 +290,15 @@ class LUTSurface(Surface):
         # Apply softmax for fractional components
         f = self.softmax(np.array(x_surface[self.idx_em_rfls]))
 
-        # Reconstruct dynamic endmembers using cached indices
+        # Reconstruct dynamic endmembers
         rho_pv = self.reconstruct_reflectance(np.array([x_surface[self.idx_pv_lr]]), self.pv)
         rho_npv = self.reconstruct_reflectance(np.array([x_surface[self.idx_npv_lr]]), self.npv)
         rho_soil = self.reconstruct_reflectance(np.array([x_surface[self.idx_soil_lr]]), self.soil)
+        em_matrix = np.column_stack([rho_pv, rho_npv, rho_soil])
 
-        # Stack dynamically reconstructed endmembers into a matrix
-        dynamic_endmember_matrix = np.column_stack([rho_pv, rho_npv, rho_soil])
-
-        # Apply linear mixture with dynamic endmembers
-        rho_dir_dir = rho_dir_dir * f[0] + np.dot(dynamic_endmember_matrix, f[1:])
-        rho_dif_dir = rho_dif_dir * f[0] + np.dot(dynamic_endmember_matrix, f[1:])
+        # Apply linear mixture
+        rho_dir_dir = rho_dir_dir * f[0] + np.dot(em_matrix, f[1:])
+        rho_dif_dir = rho_dif_dir * f[0] + np.dot(em_matrix, f[1:])
 
         return rho_dir_dir, rho_dif_dir
 

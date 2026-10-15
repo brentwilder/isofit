@@ -87,6 +87,14 @@ class Geometry:
             delta_phi = np.abs(self.solar_azimuth - self.observer_azimuth)
             self.relative_azimuth = np.minimum(delta_phi, 360 - delta_phi)  # 0 to 180
 
+            # NOTE local vza is assuemd flat for now
+            #slope_rad = np.radians(self.slope)
+            #aspect_rad = np.radians(self.aspect)
+            #obs_zen_rad = np.radians(self.observer_zenith)
+            #obs_az_rad = np.radians(self.observer_azimuth)
+            #self.cos_v = np.cos(obs_zen_rad) * np.cos(slope_rad) + np.sin(obs_zen_rad) * np.sin(slope_rad) * np.cos(obs_az_rad - aspect_rad)
+            self.cos_v = np.cos(np.radians(self.observer_zenith))
+
             # Dozier 2022 priors for cosi
             slope_sigma = np.radians(4.15)
             aspect_sigma = np.radians(24.5)
@@ -100,11 +108,19 @@ class Geometry:
             
             self.cosi_prior_sigma = np.sqrt((d_dtheta * slope_sigma)**2 + (d_dphi * aspect_sigma)**2)
             
-            #self.cosi_prior_mean = self.cos_i_static
-            self.cosi_prior_mean = np.cos(np.radians(self.solar_zenith))
+            self.cosi_prior_mean = self.cos_i_static
+            #self.cosi_prior_mean = np.cos(np.radians(self.solar_zenith))
 
             # To be safe, setting a min uncert of 0.05 so we don't bias our retrieval
             self.cosi_prior_sigma = min(0.05, self.cosi_prior_sigma)
+
+            # scattering angle for AART snow surface model
+            # NOTE 180 is scattering back, sun behind sensor
+            # 0 is sensor facing sun
+            sini = np.sin(np.arccos(self.cos_i_static))
+            self.sinv = np.sin(np.arccos(self.cos_v))
+            self.cos_raa = np.cos(np.radians(180 - (self.solar_azimuth - self.observer_azimuth)))
+            self.theta = np.degrees(np.arccos(-self.cos_i_static*self.cos_v + sini*self.sinv*self.cos_raa)) 
 
         # The 'loc' object is a list-like object that optionally contains
         # latitude and longitude information about the surface being

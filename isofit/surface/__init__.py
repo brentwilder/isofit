@@ -1,5 +1,6 @@
 from isofit.surface.surface import Surface as BaseSurface
 from isofit.surface.surface_lut import LUTSurface
+from isofit.surface.surface_kokhanovsky_snow import KokhanovskySnowSurface
 
 
 def Surface(config):
@@ -23,6 +24,10 @@ def Surface(config):
 
     elif category == "lut_surface":
         return LUTSurface(config)
+
+    elif category == "kokhanovsky_snow_surface":
+        return KokhanovskySnowSurface(config)
+
 
     else:
         # No need to be more specific - should have been checked in config already

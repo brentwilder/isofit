@@ -81,7 +81,8 @@ class ForwardModel:
 
         # Track if it is a special case LUTSurface class (for proper indexing/windowing)
         self.is_lut_surface = (
-            self.full_config.forward_model.surface.surface_category == "lut_surface"
+            (self.full_config.forward_model.surface.surface_category == "lut_surface") or 
+            (self.full_config.forward_model.surface.surface_category == "kokhanovsky_snow_surface")
         )
 
         # Check to see if using supported calibration surface model

@@ -605,7 +605,7 @@ def check_surface_model(
     if os.path.isfile(surface_path):
         if surface_path.endswith(".mat"):
 
-            if surface_category == "lut_surface":
+            if surface_category == "lut_surface" or surface_category == "kokhanovsky_snow_surface":
                 raise ValueError(
                     "Apply OE using lut_surface can only be run from a .json surface file."
                 )
@@ -1443,6 +1443,10 @@ def sensor_name_to_dt(sensor: str, fid: str):
             "Datetime object could not be obtained. Please check file name of input"
             " data."
         )
+
+    
+    # BW HARD CODED
+    inversion_window_update = [[380.0, 1250.0], [1500, 1800.0], [2100.0, 2400.0]]
     return dt, inversion_window_update
 
 
@@ -1856,7 +1860,7 @@ def make_surface_config(
 
     # Check if we are running LUTSurface
     surface_lut_file = None
-    if surface_category == "lut_surface":
+    if surface_category == "lut_surface" or surface_category == "kokhanovsky_snow_surface":
         surface_lut_file = loadmat(surface_working_paths[surface_category])[
             "surface_lut_file"
         ][0]
@@ -1929,7 +1933,7 @@ def make_surface_config(
 
         # Add to the statevector for special case of LUTSurface and
         # user has not provided all prior information in surface mat
-        if surface_lut_file and category == "lut_surface":
+        if surface_lut_file and (category == "lut_surface" or category == "kokhanovsky_snow_surface"):
 
             # If it did not get generated above we need to run this line again
             if len(statevec_names) == 0:

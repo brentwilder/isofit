@@ -21,15 +21,13 @@ pip install -e .
 
 - See `./isosnow_scripts/run.sh` for running the model on an image
 
-- The low-rank model files for PV, NPV, and Soil are in the `isosnow_data` folder and must be copied over into the home `~/.isofit/data` directory prior to running.
+- The low-rank model files for PV, NPV, and Soil are in the `isosnow_data` folder and must be copied over into the home `~/.isofit/data` directory prior to running. Same for the ice refractive indicies file.
 
-
-## Current speed
-
-- 9.9 spectra/s/core
 
 
 ## Change log
+
+- 15 October 2026: Bring in custom Kokhanovsky-based snow surface model. Phase function and r0 was fit using DISORT simulations.
 
 - 8 October 2026: Remove EMIT EOFs from state vector for now.
 
@@ -37,17 +35,15 @@ pip install -e .
 
 - 6 October 2026: ISOFIT PR-1040, update numpy version pinning (from 1.20 to 2.0)
 
-- 25 September 2026: Uploaded broadband albedo tower data for use as a benchmark
-
 - 22 September 2026: ISOFIT PR-1035, water vapor patch for presolve
 
-- 21 September 2026: Decrease ftol from 0.01 to 1e-7.
+- 21 September 2026: Decrease ftol from 0.01 to 1e-3.
 
 - 18 September 2026: Bring in example code on some prior beliefs about the static cos(i) from the DEM (Dozier et al., 2022). This is a function of per-pixel slope and aspect uncertainties. This is not implemented, but sits in Geometry right now. Need to consider/test if we actually want to use prior info from DEM.
 
 - 17 September 2026: S_hat is fully corrected now, and utilizes Sa (allowing us to use informative priors if we need at any point).
 
-- 16 September 2026: Adding sqrt transformation for grain radius to reduce interpolation error
+- 16 September 2026: Adding sqrt transformation (For DISORT LUT Surface) for grain radius to reduce interpolation error
 
 - 10 September 2026: Integrated analytical Jacobian to account for cos_i, instead of relying on numerical, 2-point method. Also, fixed bug to assign average rfl to nodata for adjacency calc (prior to aggregating). 
 

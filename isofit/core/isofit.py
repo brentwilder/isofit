@@ -359,6 +359,13 @@ class Worker(object):
                         )
                         input_data.meas = interp(self.io.meas_wl)
 
+
+                # Reduce computation using NDSI threshold
+                #NDSI_THRESHOLD = 0.3
+                #ndsi_toa = self.fm.get_ndsi_toa(input_data.meas, input_data.geom)
+                #if ndsi_toa < NDSI_THRESHOLD:
+                #    continue
+
                 logging.debug("Run model")
                 # The inversion returns a list of states, which are
                 # intepreted either as samples from the posterior (MCMC case)

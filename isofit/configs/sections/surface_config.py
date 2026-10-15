@@ -129,6 +129,7 @@ class SurfaceConfig(BaseConfigSection):
         valid_surface_categories = [
             "surface",
             "lut_surface",
+            "kokhanovsky_snow_surface",
         ]
         if (self.surface_category is None) and not len(self.Surfaces):
             errors.append("surface->surface_category or Surfaces must be specified")
