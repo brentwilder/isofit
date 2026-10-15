@@ -10,10 +10,9 @@ EMULATOR_PATH="/Users/bawilder/Documents/sRTMnet/20251206_6c_5layer_-1.6c"
 ATMOS="ATM_MIDLAT_WINTER"
 SURFACE_CONFIG_DIR="/Users/bawilder/Code/isofit-PRs/isosnow_scripts/surfacelut.json"
 LOGGING="INFO"
-ALBEDO="/Users/bawilder/Code/snow/LUT/EMIT_L3/EMIT_DISORT_20260828_ALBEDO_2.nc"
-
-ALBEDO_PAIRS_DIR="/Users/bawilder/Code/isofit-PRs/local/EMIT_SNOW/fig_v2/pairs_solved"
-
+#ALBEDO="/Users/bawilder/Code/snow/LUT/EMIT_L3/EMIT_DISORT_20260828_ALBEDO_2.nc"
+ALBEDO="/Users/bawilder/Code/snow/LUT/EMIT_L3/EMIT_AART_20261013_ALBEDO_2.nc"
+ALBEDO_PAIRS_DIR="/Users/bawilder/Code/isofit-PRs/local/EMIT_SNOW/fig_v2/pairs_alex"
 
 
 
@@ -46,7 +45,10 @@ for site_dir in "$ALBEDO_PAIRS_DIR"/*; do
         skyview_file="${data_dir}/sky_view_factor"
 
         OUTPUT_DIR="$date_dir"
+
         #          --per_pixel_heuristic_prior \
+        # lut_surface
+        # kokhanovsky_snow_surface
 
         isofit apply_oe "${rdn_file}" "${loc_file}" "${obs_file}" "${OUTPUT_DIR}" "${SENSOR}" \
           --surface_path="${SURFACE_CONFIG_DIR}" \
@@ -55,7 +57,7 @@ for site_dir in "$ALBEDO_PAIRS_DIR"/*; do
           --n_cores=${n_cores} \
           --atmosphere_type="${ATMOS}" \
           --logging_level="${LOGGING}" \
-          --surface_category="lut_surface" \
+          --surface_category="kokhanovsky_snow_surface" \
           --skyview_factor="${skyview_file}" \
           --albedo_lut="${ALBEDO}" \
           --use_background_rfl
