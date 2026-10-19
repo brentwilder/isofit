@@ -18,14 +18,14 @@
         "scale": 1.0
     },
     "GRAIN_RADIUS": {
-        "bounds": [30.0, 1500.0],
+        "bounds": [30.0, 5000.0],
         "init": 500.0,
         "prior_mean": 500.0,
         "prior_sigma": 1000000.0,
         "scale": 1.0
     },
     "LWC": {
-        "bounds": [0.0, 25.0],
+        "bounds": [0.0, 45.0],
         "init": 0.0,
         "prior_mean": 0.0,
         "prior_sigma": 1000000.0,
