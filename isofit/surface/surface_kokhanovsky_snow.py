@@ -135,13 +135,13 @@ class KokhanovskySnowSurface(Surface):
 
         with open(env.path("data", f"pv_{disort_sensor}.pkl"), "rb") as f:
             mu, V = pickle.load(f)
-            self.pv = (mu, V.T)        
+            self.pv = (mu, V.T.ravel())        
         with open(env.path("data", f"npv_{disort_sensor}.pkl"), "rb") as f:
             mu, V = pickle.load(f)
-            self.npv = (mu, V.T)         
+            self.npv = (mu, V.T.ravel())         
         with open(env.path("data", f"soil_{disort_sensor}.pkl"), "rb") as f:
             mu, V = pickle.load(f)
-            self.soil = (mu, V.T)    
+            self.soil = (mu, V.T.ravel())    
 
         self.idx_em_rfls = [
             self.statevec_names.index("FRACTIONAL_DATA"),
@@ -427,16 +427,13 @@ class KokhanovskySnowSurface(Surface):
         dlamb[:, self.idx_em_rfls] = np.column_stack([rho_snow, em_matrix]) @ df_dz
 
         if self.idx_pv_lr is not None:
-            V_pv = self.pv[1].ravel() if self.pv[1].ndim > 1 else self.pv[1]
-            dlamb[:, self.idx_pv_lr] = V_pv * f[1]
+            dlamb[:, self.idx_pv_lr] = self.pv[1] * f[1]
 
         if self.idx_npv_lr is not None:
-            V_npv = self.npv[1].ravel() if self.npv[1].ndim > 1 else self.npv[1]
-            dlamb[:, self.idx_npv_lr] = V_npv * f[2]
+            dlamb[:, self.idx_npv_lr] = self.npv[1] * f[2]
 
         if self.idx_soil_lr is not None:
-            V_soil = self.soil[1].ravel() if self.soil[1].ndim > 1 else self.soil[1]
-            dlamb[:, self.idx_soil_lr] = V_soil * f[3]
+            dlamb[:, self.idx_soil_lr] = self.soil[1] * f[3]
 
         return dlamb
 
