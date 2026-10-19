@@ -134,11 +134,14 @@ class KokhanovskySnowSurface(Surface):
             disort_sensor = "EMIT"
 
         with open(env.path("data", f"pv_{disort_sensor}.pkl"), "rb") as f:
-            self.pv = pickle.load(f)
+            mu, V = pickle.load(f)
+            self.pv = (mu, V.T)        
         with open(env.path("data", f"npv_{disort_sensor}.pkl"), "rb") as f:
-            self.npv = pickle.load(f)       
+            mu, V = pickle.load(f)
+            self.npv = (mu, V.T)         
         with open(env.path("data", f"soil_{disort_sensor}.pkl"), "rb") as f:
-            self.soil = pickle.load(f)    
+            mu, V = pickle.load(f)
+            self.soil = (mu, V.T)    
 
         self.idx_em_rfls = [
             self.statevec_names.index("FRACTIONAL_DATA"),
@@ -335,12 +338,9 @@ class KokhanovskySnowSurface(Surface):
         TODO
         """
         mu=mu_V_tuple[0]
-        V=mu_V_tuple[1]
-        rfl = V.T @ x_surface + mu
+        V_T=mu_V_tuple[1]
+        rfl = V_T @ x_surface + mu
         rfl[rfl<0] = 0.01
-
-        if np.isnan(rfl).any():
-            rfl = np.full_like(rfl, fill_value=200.0)
 
         return rfl
 
