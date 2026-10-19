@@ -133,15 +133,26 @@ class KokhanovskySnowSurface(Surface):
         if len(self.wl) == 285:
             disort_sensor = "EMIT"
 
+        # Cache V.T
         with open(env.path("data", f"pv_{disort_sensor}.pkl"), "rb") as f:
             mu, V = pickle.load(f)
-            self.pv = (mu, V.T.ravel())        
+            self.pv = (mu, V.squeeze(), V.T)        
         with open(env.path("data", f"npv_{disort_sensor}.pkl"), "rb") as f:
             mu, V = pickle.load(f)
-            self.npv = (mu, V.T.ravel())         
+            self.npv = (mu, V.squeeze(), V.T)           
         with open(env.path("data", f"soil_{disort_sensor}.pkl"), "rb") as f:
             mu, V = pickle.load(f)
-            self.soil = (mu, V.T.ravel())    
+            self.soil = (mu, V.squeeze(), V.T)       
+
+
+        # Special case can gain speed from not using matmul
+        # This value is a function of however the above pkl files were created
+        low_rank_pcs = 1
+        if low_rank_pcs == 1:
+            self.reconstruct_reflectance = self.reconstruct_reflectance_single_pc
+        else:
+            self.reconstruct_reflectance = self.reconstruct_reflectance_many_pc
+
 
         self.idx_em_rfls = [
             self.statevec_names.index("FRACTIONAL_DATA"),
@@ -246,40 +257,12 @@ class KokhanovskySnowSurface(Surface):
         return self.init
 
     def calc_rfl(self, x_surface, geom):
-        """TODO
+        """Kokhanovsky-based snow surface model with flexible low-rank endmembers to form linear mixture.
         """
-        rho_dir_dir = self.aart(x_surface, geom, diffuse=False)
-        rho_dif_dir = self.aart(x_surface, geom, diffuse=True)
 
-        # Apply softmax for fractional components
-        f = self.softmax(np.array(x_surface[self.idx_em_rfls]))
-
-        # Reconstruct endmembers
-        rho_pv = self.reconstruct_reflectance(np.array([x_surface[self.idx_pv_lr]]), self.pv)
-        rho_npv = self.reconstruct_reflectance(np.array([x_surface[self.idx_npv_lr]]), self.npv)
-        rho_soil = self.reconstruct_reflectance(np.array([x_surface[self.idx_soil_lr]]), self.soil)
-        em_matrix = np.column_stack([rho_pv, rho_npv, rho_soil])
-
-        # Apply linear mixture
-        rho_dir_dir = rho_dir_dir * f[0] + np.dot(em_matrix, f[1:])
-        rho_dif_dir = rho_dif_dir * f[0] + np.dot(em_matrix, f[1:])
-
-        return rho_dir_dir, rho_dif_dir
-
-
-
-    def aart(self, x_surface, geom, diffuse):
-        """
-        This is a custom implementation, with phase function and r0 that were fit to DISORT simulations.
-
-        We assumed a similar grain shape as described in Robledano et al. 2023, with:
-
-        g0 = 0.82
-        B0 = n^2
-
-        """
         # Ensure optimization stays in bounds
         x_surface = [max(float(b[0]), min(float(val), float(b[1]))) for val, b in zip(x_surface, self.bounds)]
+        x_surface = np.array(x_surface, dtype=float)
 
         # NOTE For now assuming order like this
         cos_i, grain_radius, lwc, dust_conc, algae_conc = x_surface[:5]
@@ -313,37 +296,51 @@ class KokhanovskySnowSurface(Surface):
         l =  d / ((9*(1-self.g0)) / (16*self.B0))
         r = np.exp(-np.sqrt(((gamma_i + (beta1+beta2)) * l)))
 
-        # Escape function - f
+        # Escape function
         u1 = 0.6*cos_i + 1. / 3. + np.sqrt(cos_i) / 3.
         u2 = 0.6*geom.cos_v + 1. / 3. + np.sqrt(geom.cos_v) / 3.
-        f = (u1 * u2) / r0
 
         # Directional Reflectance (rho_s), r0 infinit factor, r spherical albedo, and escape function
-        rho_s = r0 * r**f
+        rho_dir_dir = r0 * r**((u1 * u2) / r0)
 
         # Diffuse-direct
-        if diffuse:
-            rho_s = r**u2
+        rho_dif_dir = r**u2
 
-        return rho_s
+        # Apply softmax for fractional components
+        f = self.softmax(x_surface[self.idx_em_rfls])
 
+        # Reconstruct endmembers
+        rho_pv = self.reconstruct_reflectance(x_surface[self.idx_pv_lr], self.pv)
+        rho_npv = self.reconstruct_reflectance(x_surface[self.idx_npv_lr], self.npv)
+        rho_soil = self.reconstruct_reflectance(x_surface[self.idx_soil_lr], self.soil)
+
+        # Apply linear mixture
+        rho_dir_dir = rho_dir_dir * f[0] + rho_pv * f[1] + rho_npv * f[2] + rho_soil * f[3]
+        rho_dif_dir = rho_dif_dir * f[0] + rho_pv * f[1] + rho_npv * f[2] + rho_soil * f[3]
+
+        return rho_dir_dir, rho_dif_dir
 
     def calc_lamb(self, x_surface, geom):
         """Lambertian reflectance."""
         _ , rho_dif = self.calc_rfl(x_surface, geom)
         return rho_dif
 
-    def reconstruct_reflectance(self, x_surface, mu_V_tuple):
+    def reconstruct_reflectance_single_pc(self, x_surface, mu_V_tuple):
         """
         TODO
         """
-        mu=mu_V_tuple[0]
-        V_T=mu_V_tuple[1]
-        rfl = V_T @ x_surface + mu
+        rfl = mu_V_tuple[1] * x_surface + mu_V_tuple[0]
         rfl[rfl<0] = 0.01
 
         return rfl
 
+    def reconstruct_reflectance_many_pc(self, x_surface, mu_V_tuple):
+        """
+        TODO
+        """
+        rfl = mu_V_tuple[2] @ x_surface + mu_V_tuple[0]
+        rfl[rfl<0] = 0.01
+        return rfl
 
     def softmax(self, z):
         "Used to maintain sum-to-1 condition and positive fractional covers"
@@ -363,13 +360,16 @@ class KokhanovskySnowSurface(Surface):
 
         _, grain_radius, lwc, dust_conc, algae_conc = x_surface[:5]
 
+        # Scaling
         d = grain_radius * 2 * 1e-6
         dust_conc = dust_conc * self.dust_conc_sf
         lwc = lwc / 100.0
         algae_conc = algae_conc * self.algae_conc_sf
-        
+
+        # effective imag. index
         k_eff = (1 - lwc) * self.k_ice + lwc * self.k_water
 
+        # Common term for the partials below
         beta1 = 2.0 / d * self.mae_dust * dust_conc
         beta2 = 2.0 / d * self.mae_alg * algae_conc
         gamma_i = (4 * np.pi * k_eff) / self.model_wl
@@ -383,8 +383,7 @@ class KokhanovskySnowSurface(Surface):
         u2 = 0.6 * geom.cos_v + 1.0 / 3.0 + np.sqrt(geom.cos_v) / 3.0
         
         rho_snow = np.exp(-u2 * S)
-
-        # Common term for the partials below
+        
         drho_dinner = -u2 * rho_snow / (2.0 * S + 1e-12)
 
         # Grain radius
@@ -414,17 +413,16 @@ class KokhanovskySnowSurface(Surface):
         f = np.exp(x_surface[self.idx_em_rfls]) / np.sum(np.exp(x_surface[self.idx_em_rfls]))
         df_dz = np.diag(f) - np.outer(f, f)
 
-        rho_pv = self.reconstruct_reflectance(np.array([x_surface[self.idx_pv_lr]]), self.pv)
-        rho_npv = self.reconstruct_reflectance(np.array([x_surface[self.idx_npv_lr]]), self.npv)
-        rho_soil = self.reconstruct_reflectance(np.array([x_surface[self.idx_soil_lr]]), self.soil)
-        em_matrix = np.column_stack([rho_pv, rho_npv, rho_soil])
+        rho_pv = self.reconstruct_reflectance(x_surface[self.idx_pv_lr], self.pv)
+        rho_npv = self.reconstruct_reflectance(x_surface[self.idx_npv_lr], self.npv)
+        rho_soil = self.reconstruct_reflectance(x_surface[self.idx_soil_lr], self.soil)
 
         dlamb[:, 0] = 0.0 
         dlamb[:, 1] = drho_dgr * f[0]    
         dlamb[:, 2] = drho_dlwc * f[0]    
         dlamb[:, 3] = drho_ddust * f[0] 
         dlamb[:, 4] = drho_dalgae * f[0] 
-        dlamb[:, self.idx_em_rfls] = np.column_stack([rho_snow, em_matrix]) @ df_dz
+        dlamb[:, self.idx_em_rfls] = np.column_stack([rho_snow, rho_pv, rho_npv, rho_soil]) @ df_dz
 
         if self.idx_pv_lr is not None:
             dlamb[:, self.idx_pv_lr] = self.pv[1] * f[1]
