@@ -424,10 +424,7 @@ class KokhanovskySnowSurface(Surface):
         dlamb[:, 2] = drho_dlwc * f[0]    
         dlamb[:, 3] = drho_ddust * f[0] 
         dlamb[:, 4] = drho_dalgae * f[0] 
-
-        components = np.column_stack([rho_snow, em_matrix])
-        for idx_pos, state_idx in enumerate(self.idx_em_rfls):
-            dlamb[:, state_idx] = np.dot(components, df_dz[:, idx_pos])
+        dlamb[:, self.idx_em_rfls] = np.column_stack([rho_snow, em_matrix]) @ df_dz
 
         if self.idx_pv_lr is not None:
             V_pv = self.pv[1].ravel() if self.pv[1].ndim > 1 else self.pv[1]
