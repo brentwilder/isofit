@@ -19,7 +19,6 @@
 #
 from __future__ import annotations
 
-import logging
 import numpy as np
 import pickle
 from scipy import interpolate
@@ -189,10 +188,6 @@ class KokhanovskySnowSurface(Surface):
         self.mae400 = 110 # fixed based on PM2_5 Libya in Caponi 2017
         self.dust_conc_sf = 1e-6 * ((self.density_ice / 1000) / (self.dust_density * (8 / np.pi)))
 
-        # The cosi value to represent diffuse-direct reflectance
-        # planar albedo for cosi=1.0 matches dif_dir DISORT very closely
-        self.dif_dir_cosi = 1.0
-
         # Custom phase and r0 params
         # NOTE: These are linked to the g0 and B0 below
         # Updated params for different shape can be estimated by fitting to DISORT across principal plane
@@ -291,11 +286,6 @@ class KokhanovskySnowSurface(Surface):
         sini = np.sin(np.arccos(cos_i))
         self.theta = np.degrees(np.arccos(-cos_i*geom.cos_v + sini*geom.sinv*geom.cos_raa)) 
 
-        # The cosi value to represent diffuse-direct reflectance
-        # planar albedo for cosi=1.0 matches dif_dir DISORT very closely
-        if diffuse:
-            cos_i = self.dif_dir_cosi
-
         #  SSA to diameter
         #d = 6 / (917*ssa)
 
@@ -328,13 +318,9 @@ class KokhanovskySnowSurface(Surface):
         # Directional Reflectance (rho_s), r0 infinit factor, r spherical albedo, and escape function
         rho_s = r0 * r**f
 
-        # Compute r_p - plane albedo 
-        # For aart rfl forward model here we don't return it exactly..
-        # Experiments showed r_p to be very similar to dif_dir from DISORT
-        # when cosi is equal to 1.0.
+        # Diffuse-direct
         if diffuse:
-            #r_p = r**u1
-            rho_s = r**u1
+            rho_s = r**u2
 
         return rho_s
 
@@ -395,12 +381,12 @@ class KokhanovskySnowSurface(Surface):
         X = gamma_i + beta1 + beta2
         S = np.sqrt(X * l)
         
-        u1 = 0.6 * self.dif_dir_cosi + 1.0 / 3.0 + np.sqrt(self.dif_dir_cosi) / 3.0
+        u2 = 0.6 * geom.cos_v + 1.0 / 3.0 + np.sqrt(geom.cos_v) / 3.0
         
-        rho_snow = np.exp(-u1 * S)
+        rho_snow = np.exp(-u2 * S)
 
         # Common term for the partials below
-        drho_dinner = -u1 * rho_snow / (2.0 * S + 1e-12)
+        drho_dinner = -u2 * rho_snow / (2.0 * S + 1e-12)
 
         # Grain radius
         dd_dgr = 2 * 1e-6
