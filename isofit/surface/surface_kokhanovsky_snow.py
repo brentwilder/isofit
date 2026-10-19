@@ -170,7 +170,7 @@ class KokhanovskySnowSurface(Surface):
         k_wi_idx = ~np.isnan(k_wi["wl_20c"]) & ~np.isnan(k_wi["k_20c"])
         self.k_water = np.interp(x=self.wl, xp=k_wi["wl_20c"][k_wi_idx], fp=k_wi["k_20c"][k_wi_idx])
 
-        # algae constants
+        # Algae constants
         # from Dauchet et al. [2015]
         self.abs_xsc = snow_algae_chevrollier_2023(self.wl)
         self.x_w = 0.78 # water fraction
@@ -186,6 +186,7 @@ class KokhanovskySnowSurface(Surface):
         self.dust_density = 2.65 # g cm-3
         self.aae = 4.1 # fixed based on PM2_5 Libya in Caponi 2017
         self.mae400 = 110 # fixed based on PM2_5 Libya in Caponi 2017
+        self.mae_dust = self.mae400 * (self.model_wl / 400e-9)**(-self.aae)
         self.dust_conc_sf = 1e-6 * ((self.density_ice / 1000) / (self.dust_density * (8 / np.pi)))
 
         # Custom phase and r0 params
@@ -303,8 +304,7 @@ class KokhanovskySnowSurface(Surface):
         r0 = (self.r0_0 + self.r0_1 * (cos_i + geom.cos_v) + self.r0_2 * cos_i * geom.cos_v + p) / 4.0 / (cos_i + geom.cos_v)
 
         # Compute r - spherical albedo (considering different polutants)
-        mae = self.mae400 * (self.model_wl / 400e-9)**(-self.aae)
-        beta1 = 2.0 / d * mae * dust_conc
+        beta1 = 2.0 / d * self.mae_dust * dust_conc
         beta2 = 2.0 / d * self.mae_alg * algae_conc
         gamma_i = (4 * np.pi * k_eff) / self.model_wl
         l =  d / ((9*(1-self.g0)) / (16*self.B0))
@@ -370,8 +370,7 @@ class KokhanovskySnowSurface(Surface):
         
         k_eff = (1 - lwc) * self.k_ice + lwc * self.k_water
 
-        mae = self.mae400 * (self.model_wl / 400e-9)**(-self.aae)
-        beta1 = 2.0 / d * mae * dust_conc
+        beta1 = 2.0 / d * self.mae_dust * dust_conc
         beta2 = 2.0 / d * self.mae_alg * algae_conc
         gamma_i = (4 * np.pi * k_eff) / self.model_wl
         
@@ -402,7 +401,7 @@ class KokhanovskySnowSurface(Surface):
         drho_dlwc = drho_dinner * dinner_dlwc
 
         # Dust
-        dbeta1_ddust = 2.0 / d * mae * self.dust_conc_sf
+        dbeta1_ddust = 2.0 / d * self.mae_dust * self.dust_conc_sf
         dinner_ddust = dbeta1_ddust * l
         drho_ddust = drho_dinner * dinner_ddust
 
