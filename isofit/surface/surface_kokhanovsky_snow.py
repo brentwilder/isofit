@@ -129,18 +129,20 @@ class KokhanovskySnowSurface(Surface):
         # vis for bad fit of PV. It will fluctuate this term instead.
 
         if len(self.wl) == 425:
-            disort_sensor = "ANG"
+            lowrank_file = "ANG"
         if len(self.wl) == 285:
-            disort_sensor = "EMIT"
+            lowrank_file = "EMIT"
+        if len(self.wl) == 224:
+            lowrank_file = "ENMAP"
 
         # Cache V.T
-        with open(env.path("data", f"pv_{disort_sensor}.pkl"), "rb") as f:
+        with open(env.path("data", f"pv_{lowrank_file}.pkl"), "rb") as f:
             mu, V = pickle.load(f)
             self.pv = (mu, V.squeeze(), V.T)        
-        with open(env.path("data", f"npv_{disort_sensor}.pkl"), "rb") as f:
+        with open(env.path("data", f"npv_{lowrank_file}.pkl"), "rb") as f:
             mu, V = pickle.load(f)
             self.npv = (mu, V.squeeze(), V.T)           
-        with open(env.path("data", f"soil_{disort_sensor}.pkl"), "rb") as f:
+        with open(env.path("data", f"soil_{lowrank_file}.pkl"), "rb") as f:
             mu, V = pickle.load(f)
             self.soil = (mu, V.squeeze(), V.T)       
 
