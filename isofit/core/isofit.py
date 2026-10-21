@@ -341,24 +341,8 @@ class Worker(object):
 
             self.completed_spectra += 1
             if input_data is not None:
-                nan_locs = np.where(np.isnan(input_data.meas))
-                if len(nan_locs) > 0:
-                    if len(nan_locs) > 0.25 * len(input_data.meas):
-                        logging.exception(
-                            f"Input data gap >25% for pixel at index ({row}, {col}). "
-                            f"Skipping inversion. Results for this pixel will be all zeros."
-                        )
-                        continue
-                    else:
-                        non_nan_locs = np.where(np.isnan(input_data.meas) == False)
-                        interp = scipy.interpolate.interp1d(
-                            self.io.meas_wl[non_nan_locs],
-                            input_data.meas[non_nan_locs],
-                            kind="linear",
-                            fill_value="extrapolate",
-                        )
-                        input_data.meas = interp(self.io.meas_wl)
-
+                if input_data.meas[2] < 1e-12 or np.any(np.isnan(input_data.meas)):
+                    continue
 
                 # Reduce computation using NDSI threshold
                 #NDSI_THRESHOLD = 0.3
