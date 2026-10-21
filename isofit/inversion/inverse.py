@@ -141,17 +141,16 @@ class Inversion:
 
         Sa, Sa_inv, Sa_inv_sqrt = self.fm.Sa(x, geom)
 
-        #set_cosi = False
-        #if set_cosi:
-        #    if hasattr(geom, 'cosi_prior_sigma') and 'COS_I' in self.fm.statevec:
-        #        idx = self.fm.statevec.index('COS_I')
-        #        xa[idx] = geom.cosi_prior_mean
-        #        effective_sigma = 1e-4
-        #        #effective_sigma = geom.cosi_prior_sigma
-        #        var = effective_sigma**2
-        #        Sa[idx, idx] = var
-        #        Sa_inv[idx, idx] = 1.0 / var
-        #        Sa_inv_sqrt[idx, idx] = 1.0 / effective_sigma
+ 
+    #    if hasattr(geom, 'cosi_prior_sigma') and 'COS_I' in self.fm.statevec:
+    #        idx = self.fm.statevec.index('COS_I')
+    #        xa[idx] = geom.cosi_prior_mean
+    #        effective_sigma = 1e-4
+    #        #effective_sigma = geom.cosi_prior_sigma
+    #        var = effective_sigma**2
+    #        Sa[idx, idx] = var
+    #        Sa_inv[idx, idx] = 1.0 / var
+    #        Sa_inv_sqrt[idx, idx] = 1.0 / effective_sigma
 
         return xa, Sa, Sa_inv, Sa_inv_sqrt
 
