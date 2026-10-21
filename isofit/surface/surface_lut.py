@@ -240,6 +240,16 @@ class LUTSurface(Surface):
             self.soil = (mu, V.squeeze(), V.T)       
 
 
+        # Special case can gain speed from not using matmul
+        # This value is a function of however the above pkl files were created
+        low_rank_pcs = 1
+        if low_rank_pcs == 1:
+            self.reconstruct_reflectance = self.reconstruct_reflectance_single_pc
+        else:
+            self.reconstruct_reflectance = self.reconstruct_reflectance_many_pc
+  
+
+
     def update_heuristic_prior_means(self, x_surface, geom):
         return x_surface
 
@@ -312,18 +322,22 @@ class LUTSurface(Surface):
         _, rho_dif = self.calc_rfl(x_surface, geom)
         return rho_dif
 
-    def reconstruct_reflectance(self, x_surface, mu_V_tuple):
+    
+    def reconstruct_reflectance_single_pc(self, x_surface, mu_V_tuple):
         """
         TODO
         """
-        mu=mu_V_tuple[0]
-        V=mu_V_tuple[1]
-        rfl = V.T @ x_surface + mu
+        rfl = mu_V_tuple[1] * x_surface + mu_V_tuple[0]
         rfl[rfl<0] = 0.01
 
-        if np.isnan(rfl).any():
-            rfl = np.full_like(rfl, fill_value=200.0)
+        return rfl
 
+    def reconstruct_reflectance_many_pc(self, x_surface, mu_V_tuple):
+        """
+        TODO
+        """
+        rfl = mu_V_tuple[2] @ x_surface + mu_V_tuple[0]
+        rfl[rfl<0] = 0.01
         return rfl
 
 
