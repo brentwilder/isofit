@@ -334,6 +334,7 @@ class SnowWorker(object):
             _lwc_v = lwc_vals[r, c]
             _sza_v = sub_obs[r, c, 4]
             _cosi_v = sub_state[r, c, self.cosi_idx]
+            _h2o_v = sub_state[r, c, self.h2o_idx]
             _svf_v = sub_svf[r, c]
 
             u_grain = sub_uncert[r, c, self.grain_idx]
@@ -343,8 +344,8 @@ class SnowWorker(object):
 
             # NOTE: can use FWHM if needed
             # But tests showed 10 nm to give similar performance at broadband resolution
-            # Assuming a fixed AOD and h2o for albedo retrieval
-            lut_array = np.array([0.02, 0.1, _sza_v, _alt_v])
+            # Assuming a fixed AOD for albedo retrieval
+            lut_array = np.array([0.02, _h2o_v, _sza_v, _alt_v])
             L_down_dir = self.g_t_down_dir(lut_array) * self.solar_irr_full * np.cos(np.radians(_sza_v)) / np.pi
             L_down_dif = self.g_t_down_dif(lut_array) * self.solar_irr_full * np.cos(np.radians(_sza_v)) / np.pi
 
