@@ -60,7 +60,8 @@ for site_dir in "$ALBEDO_PAIRS_DIR"/*; do
           --surface_category="kokhanovsky_snow_surface" \
           --skyview_factor="${skyview_file}" \
           --albedo_lut="${ALBEDO}" \
-          --use_background_rfl
+          --use_background_rfl \
+          --per_pixel_heuristic_prior
     done
 done
 

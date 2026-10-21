@@ -739,6 +739,7 @@ def build_config(
     per_pixel_heuristic_prior: bool = False,
     use_background_rfl: bool = False,
     elevation_km: float = 0.0,
+    mineral_dust_properties: list = [],
 ) -> None:
     """Write an isofit config file for the main solve, using the specified pathnames and all given info
 
@@ -880,6 +881,7 @@ def build_config(
                 terrain_style=terrain_style,
                 max_slope=max_slope,
                 use_background_rfl=use_background_rfl,
+                mineral_dust_properties=mineral_dust_properties,
             ),
         },
         "implementation": make_implementation_config(
@@ -1852,6 +1854,7 @@ def make_surface_config(
     max_slope: float = 200.0,
     surface_refractive_index_path: str = None,
     use_background_rfl=False,
+    mineral_dust_properties=[],
 ):
     # Initialize config dict
     surface_config_dict = {
@@ -1901,6 +1904,7 @@ def make_surface_config(
                 "terrain_style": terrain_style,
                 "max_slope": max_slope,
                 "use_background_rfl": use_background_rfl,
+                "mineral_dust_properties": mineral_dust_properties,
             }
 
     # Single surface run
@@ -1911,6 +1915,7 @@ def make_surface_config(
         surface_config_dict["terrain_style"] = terrain_style
         surface_config_dict["max_slope"] = max_slope
         surface_config_dict["use_background_rfl"] = use_background_rfl
+        surface_config_dict["mineral_dust_properties"] = mineral_dust_properties
 
     # Accumulate statevector
     for category, path in surface_working_paths.items():

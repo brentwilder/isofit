@@ -4,11 +4,12 @@ import numpy as np
 from scipy import interpolate
 from spectral.io import envi
 
+from isofit.configs import configs
 from isofit import ray
 from isofit.core.fileio import initialize_output, write_bil_chunk
 from isofit.core.common import VectorInterpolator, envi_header
 from isofit.core.units import micron_to_nm
-from isofit.surface.surface_kokhanovsky_snow import snow_algae_chevrollier_2023
+import isofit.surface.constants as c
 
 from isofit.data import env
 
@@ -58,6 +59,7 @@ def snow_model_outputs_aart(
     dayofyear, 
     n_cores,
     nodata_value=-9999,
+    config_path=None,
 ):
     """TODO"""
 
@@ -101,6 +103,9 @@ def snow_model_outputs_aart(
     ice_path = env.path("data", "rfidx_ice.npz")
     water_path = env.path("data", "iop", "k_liquid_water_ice.csv")
 
+    config = configs.create_new_config(config_path)
+    mineral_dust_properties = config.forward_model.surface.mineral_dust_properties
+
     wargs = [
         ray.put(g_t_down_dir),
         ray.put(g_t_down_dif),
@@ -116,6 +121,7 @@ def snow_model_outputs_aart(
         outpath_uncert,
         ice_path,
         water_path,
+        mineral_dust_properties,
     ]
     
     workers = ray.util.ActorPool([SnowWorker.remote(*wargs) for _ in range(n_cores)])
@@ -144,6 +150,7 @@ class SnowWorker(object):
         outpath_uncert: str,
         ice_path,
         water_path,
+        mineral_dust_properties,
 
     ):
         self.nodata_value = nodata_value
@@ -172,24 +179,16 @@ class SnowWorker(object):
         self.k_water_coarse = np.interp(x=self.wl_art, xp=k_wi["wl_20c"][k_wi_idx], fp=k_wi["k_20c"][k_wi_idx])
 
         # Get algae data
-        self.abs_xsc_coarse = snow_algae_chevrollier_2023(self.wl_art)
+        self.abs_xsc_coarse = c.snow_algae_chevrollier_2023(self.wl_art)
 
-
-        self.g0 = 0.82
+        self.g0 = c.G0
         self.B0 = self.r_ice_coarse**2
         self.eps = (9.0 * (1.0 - self.g0)) / (16.0 * self.B0)
-        self.aae = 4.1
-        self.mae400 = 110.0
+        self.mae400, self.aae = c.get_dust_optical_properties(mineral_dust_properties)
         self.mae = self.mae400 * (self.wavelengths / 400e-9)**(-self.aae)
 
-        x_w = 0.78
-        self.cell_radius = 7.0
-        self.cell_volume = (4.0 / 3.0 * np.pi * self.cell_radius**3) * 1e-18
-        k_alg = x_w * self.k_water_coarse + self.abs_xsc_coarse * self.wavelengths / (np.pi * 4.0) / self.cell_volume
-        density_algae = 1400.0
-        self.mae_alg = (8.0 / np.pi) / self.wavelengths * k_alg / density_algae
-        self.density_ice = 917.0
-        self.density_algae = density_algae
+        k_alg = c.X_W * self.k_water_coarse + self.abs_xsc_coarse * self.wavelengths / (np.pi * 4.0) / c.CELL_VOLUME
+        self.mae_alg = (8.0 / np.pi) / self.wavelengths * k_alg / c.DENSITY_ALGAE
 
         self.loc = envi.open(envi_header(input_loc), input_loc).open_memmap(interleave="bip")
         self.obs = envi.open(envi_header(input_obs), input_obs).open_memmap(interleave="bip")
@@ -249,24 +248,14 @@ class SnowWorker(object):
 
         k_eff = (1.0 - lwc) * self.k_ice_coarse + lwc * self.k_water_coarse
 
-        k_alg = 0.78 * self.k_water_coarse + self.abs_xsc_coarse * self.wavelengths  / (np.pi * 4.0) / self.cell_volume
-        mae_alg = (8.0 / np.pi) / self.wavelengths  * k_alg / self.density_algae
-
-        dust_conc = dust_conc * (0.917 / (2.65 * (8.0 / np.pi)))
-        algae_conc = (algae_conc * 1e6 * self.cell_volume)[:, np.newaxis]
-        algae_conc = algae_conc * (self.density_algae / self.density_ice)
-
-        p = -1.90946652e+00 * np.exp(-1.58752445e-02 * theta) + 6.83972969e+00 * np.exp(-5.42025234e-03 * theta)
-        r0 = (-1.11176131e+00 - 7.12680819e-01 * (cos_sza + cos_vza) + 9.02713485e+00 * cos_sza * cos_vza + p) / 4.0 / (cos_sza + cos_vza)
+        dust_conc = dust_conc * ((c.DENSITY_ICE/1000) / (c.DUST_DENSITY * (8.0 / np.pi)))
+        algae_conc = (algae_conc * 1e6 * c.CELL_VOLUME)[:, np.newaxis] * (c.DENSITY_ALGAE / c.DENSITY_ICE)
 
         beta1 = 2.0 / d * self.mae * dust_conc
-        beta2 = 2.0 / d * mae_alg * algae_conc
+        beta2 = 2.0 / d * self.mae_alg * algae_conc
         gamma_i = (4.0 * np.pi * k_eff) / self.wavelengths 
-        
-        l_param = d / self.eps
-        term = (gamma_i + (beta1 + beta2)) * l_param
-        S = np.sqrt(np.maximum(term, 1e-12))
-        r = np.exp(-S)
+
+        r = np.exp(-np.sqrt(np.maximum((gamma_i + (beta1 + beta2)) * (d / self.eps), 1e-12)))
 
         u1 = 0.6 * cos_sza + 1.0 / 3.0 + np.sqrt(cos_sza) / 3.0
         return r**u1

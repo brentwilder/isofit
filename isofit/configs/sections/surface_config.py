@@ -61,6 +61,9 @@ class SurfaceConfig(BaseConfigSection):
         self._use_background_rfl_type = bool
         self.use_background_rfl = False
 
+        self._mineral_dust_properties_type = list
+        self.mineral_dust_properties = []
+
         self._surface_file_type = str
         self.surface_file = None
 

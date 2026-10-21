@@ -26,9 +26,9 @@ from scipy import interpolate
 from isofit.core.common import svd_inv_sqrt
 from isofit.core.units import micron_to_nm
 from isofit.surface.surface import Surface
+import isofit.surface.constants as c
 
 from isofit.data import env
-
 
 
 class KokhanovskySnowSurface(Surface):
@@ -42,6 +42,7 @@ class KokhanovskySnowSurface(Surface):
         config = full_config.forward_model.surface
         self.terrain_style = config.terrain_style
         self.max_slope = config.max_slope
+        self.mineral_dust_properties = config.mineral_dust_properties
         self.solve_mixed_pixel = True
 
 
@@ -186,43 +187,32 @@ class KokhanovskySnowSurface(Surface):
         k_wi_idx = ~np.isnan(k_wi["wl_20c"]) & ~np.isnan(k_wi["k_20c"])
         self.k_water = np.interp(x=self.wl, xp=k_wi["wl_20c"][k_wi_idx], fp=k_wi["k_20c"][k_wi_idx])
 
-        # Algae constants
-        # from Dauchet et al. [2015]
-        self.abs_xsc = snow_algae_chevrollier_2023(self.wl)
-        self.x_w = 0.78 # water fraction
-        self.cell_radius = 7 # micrometer
-        self.cell_volume = (4/3 * np.pi * self.cell_radius**3) * 1e-18 #micro to m3
-        self.density_algae = 1400
-        self.density_ice = 917.0
-        self.k_alg = self.x_w * self.k_water + self.abs_xsc * self.model_wl / (np.pi * 4) / self.cell_volume
-        self.mae_alg = (8 / np.pi) / self.model_wl * self.k_alg / self.density_algae 
-        self.algae_conc_sf = (1e6 * self.cell_volume * (self.density_algae / self.density_ice))
+        # Algae
+        # from Dauchet et al. 2015 and Chevrollier 2023
+        self.abs_xsc = c.snow_algae_chevrollier_2023(self.wl)
+        self.k_alg = c.X_W * self.k_water + self.abs_xsc * self.model_wl / (np.pi * 4) / c.CELL_VOLUME
+        self.mae_alg = (8 / np.pi) / self.model_wl * self.k_alg / c.DENSITY_ALGAE
+        self.algae_conc_sf = (1e6 * c.CELL_VOLUME * (c.DENSITY_ALGAE/ c.DENSITY_ICE))
 
-        # Mineral dust constants
-        self.dust_density = 2.65 # g cm-3
-        self.aae = 4.1 # fixed based on PM2_5 Libya in Caponi 2017
-        self.mae400 = 110 # fixed based on PM2_5 Libya in Caponi 2017
+        # Mineral dust 
+        self.mae400, self.aae = c.get_dust_optical_properties(self.mineral_dust_properties)
         self.mae_dust = self.mae400 * (self.model_wl / 400e-9)**(-self.aae)
-        self.dust_conc_sf = 1e-6 * ((self.density_ice / 1000) / (self.dust_density * (8 / np.pi)))
+        self.dust_conc_sf = 1e-6 * ((c.DENSITY_ICE / 1000) / (c.DUST_DENSITY * (8 / np.pi)))
 
         # Custom phase and r0 params
         # NOTE: These are linked to the g0 and B0 below
         # Updated params for different shape can be estimated by fitting to DISORT across principal plane
-        self.p_0 = -1.90946652e+00
-        self.p_1 = 1.58752445e-02
-        self.p_2 = 6.83972969e+00
-        self.p_3 = 5.42025234e-03
+        self.p_0 = c.P_0
+        self.p_1 = c.P_1
+        self.p_2 = c.P_2
+        self.p_3 = c.P_3
 
-        self.r0_0 = -1.11176131e+00
-        self.r0_1 = -7.12680819e-01
-        self.r0_2 = 9.02713485e+00
+        self.r0_0 = c.R0_0
+        self.r0_1 = c.R0_1
+        self.r0_2 = c.R0_2
 
-        self.g0 = 0.82 # Middle range of Robledano et al. 2023
+        self.g0 = c.G0 # Middle range of Robledano et al. 2023
         self.B0 = self.r_ice**2 #B=n2 from Robledano et al. 2023
-
-        # original relation for reference
-        #p = 11.1 * np.exp(-0.087 * geom.theta) + 1.1 * np.exp(-0.014 * geom.theta)
-        #r0 = (1.247 + 1.186 * (cos_i + geom.cos_v) + 5.157 * cos_i * geom.cos_v + p) / 4.0 / (cos_i + geom.cos_v)
 
         # Not used here in the reflectance model... but for the albedo output we assume similar relation as TARTES, 
         # we assume mu_s = ((7 / 3 - 1) / 2) for the white sky albedo term.
@@ -590,53 +580,3 @@ class KokhanovskySnowSurface(Surface):
 
 
 
-
-
-
-
-########################################
-# INTERPOLATED DATA FROM Chevrollier2023
-########################################
-
-# Interpolated from snow_algae_empirical_Chevrollier2023
-algae_abs_wavelengths = np.array([
-    340., 345., 350., 355., 360., 365., 370., 375., 380., 385., 390., 395., 400., 405.,
-    410., 415., 420., 425., 430., 435., 440., 445., 450., 455., 460., 465., 470., 475.,
-    480., 485., 490., 495., 500., 505., 510., 515., 520., 525., 530., 535., 540., 545.,
-    550., 555., 560., 565., 570., 575., 580., 585., 590., 595., 600., 605., 610., 615.,
-    620., 625., 630., 635., 640., 645., 650., 655., 660., 665., 670., 675., 680., 685.,
-    690., 695., 700., 705., 710., 715., 720., 725., 730., 735., 740., 745., 750., 755.,
-    760., 765., 770., 775., 780., 785., 790., 795., 800., 805., 810., 815., 820., 825.,
-    830., 835., 840., 845., 850.])
-
-algae_abs_data = np.array([
-    1.77335262e-10, 1.77335262e-10, 1.77335262e-10, 1.77335262e-10,
-    1.77335262e-10, 1.77335262e-10, 1.77335262e-10, 1.77335262e-10,
-    1.77335262e-10, 1.77335262e-10, 1.77335262e-10, 1.77335262e-10,
-    1.77335262e-10, 1.77335262e-10, 1.77335262e-10, 1.77335262e-10,
-    1.77335262e-10, 1.77335262e-10, 1.77335262e-10, 1.77335262e-10,
-    1.77335262e-10, 1.77335262e-10, 1.77335262e-10, 1.77335262e-10,
-    1.77335262e-10, 1.77335262e-10, 1.77335262e-10, 1.77335262e-10,
-    1.77335262e-10, 1.77335262e-10, 1.77335262e-10, 1.77335262e-10,
-    1.77335262e-10, 1.77335262e-10, 1.77335262e-10, 1.77335262e-10,
-    1.77335262e-10, 1.77335262e-10, 1.77335262e-10, 1.77335262e-10,
-    1.77335262e-10, 1.77335262e-10, 1.77268582e-10, 1.77201902e-10,
-    1.72238472e-10, 1.67275043e-10, 1.54499561e-10, 1.41724079e-10,
-    1.21583405e-10, 1.01442732e-10, 8.44938366e-11, 6.75449410e-11,
-    5.86893966e-11, 4.98338523e-11, 4.52856453e-11, 4.07374384e-11,
-    3.76331693e-11, 3.45289002e-11, 3.16364558e-11, 2.87440114e-11,
-    2.91436459e-11, 2.95432803e-11, 3.14390655e-11, 3.33348508e-11,
-    3.46587407e-11, 3.59826307e-11, 4.00603803e-11, 4.41381300e-11,
-    4.01574201e-11, 3.61767102e-11, 2.48784552e-11, 1.35802002e-11,
-    7.20517045e-12, 8.30140716e-13, 4.58160528e-13, 8.61803404e-14,
-    8.76886425e-14, 8.91969445e-14, 8.59923354e-14, 8.27877263e-14,
-    1.92606610e-14, -4.42664044e-14, -9.37278041e-14, -1.43189204e-13,
-    -1.74431051e-13, -2.05672899e-13, -2.14995734e-13, -2.24318569e-13,
-    -1.96513499e-13, -1.68708428e-13, -1.02131249e-13, -3.55540688e-14,
-    -1.77770344e-14, -1.88221673e-27, 0.00000000e+00, 0.00000000e+00,
-    0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 0.00000000e+00,
-    0.00000000e+00, 0.00000000e+00, 0.00000000e+00])
-
-
-def snow_algae_chevrollier_2023(wls):
-    return interpolate.interp1d(algae_abs_wavelengths, algae_abs_data, kind="slinear", bounds_error=False, fill_value=0.0)(wls)

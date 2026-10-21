@@ -678,6 +678,44 @@ def apply_oe(
             else:
                 logging.info(f"Skipping {inp}, because is not a path.")
 
+    
+
+    # Determine the dust OPs we want to use...
+    # NOTE these are very much best guesses and likely not a very good one.
+    # To revisit if/when we have more information on performance for these regions.
+    
+    # base not captured in below
+    mineral_dust_properties = ["PM2_5", "libya"]
+
+    # roughly north america
+    if 7.0 <= mean_latitude <= 85.0 and -170.0 <= mean_longitude <= -50.0:
+        mineral_dust_properties = ["PM10", "arizona"]
+
+    # roughly south america
+    elif -60.0 <= mean_latitude < 15.0 and -90.0 <= mean_longitude <= -30.0:
+        mineral_dust_properties = ["PM10", "patagonia"]
+
+    # roughly africa
+    elif -35.0 <= mean_latitude <= 38.0 and -20.0 <= mean_longitude <= 55.0:
+        mineral_dust_properties = ["PM2_5", "libya"]
+
+    # roughly western europe
+    elif 35.0 <= mean_latitude <= 75.0 and -25.0 <= mean_longitude <= 45.0:
+        mineral_dust_properties = ["PM2_5", "libya"]
+
+    # roughly eastern europe , west asia
+    elif 5.0 <= mean_latitude <= 55.0 and 55.0 <= mean_longitude <= 100.0:
+        mineral_dust_properties = ["PM10", "saudi_arabia"]
+
+    # roughly east asia
+    elif 15.0 <= mean_latitude <= 80.0 and 100.0 <= mean_longitude <= 180.0:
+        mineral_dust_properties = ["PM10", "china"]
+
+    # new zealand and australia
+    elif -50.0 <= mean_latitude <= -10.0 and 110.0 <= mean_longitude <= 180.0:
+        mineral_dust_properties = ["PM10", "australia"]
+
+
     config_params = {
         "paths": paths,
         "n_cores": n_cores,
@@ -693,6 +731,7 @@ def apply_oe(
         "per_pixel_heuristic_prior": per_pixel_heuristic_prior,
         "use_background_rfl": use_background_rfl,
         "elevation_km": mean_elevation_km,
+        "mineral_dust_properties": mineral_dust_properties,
     }
     if presolve:
         # write modtran presolve template
@@ -968,7 +1007,8 @@ def apply_oe(
                         modtran_file="/Volumes/ExtremeSSD/Brent/20260902_modtran_bluehookv3_with_h2o/modtran_blue_hook_v4_10nm.nc",
                         dayofyear=dayofyear, 
                         n_cores=n_cores,
-                        nodata_value=-9999)
+                        nodata_value=-9999,
+                        config_path=paths.isofit_full_config_path)
 
     # Generate snow outputs
     #snow_model_outputs(input_loc=input_loc,
