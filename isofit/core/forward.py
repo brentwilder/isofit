@@ -550,6 +550,8 @@ class ForwardModel:
             cos_i = x_surface[self.surface.cos_i_idx]
         except:  # BG CASE
             cos_i = geom.cos_i
+            
+        cos_i = max(1e-8, min(cos_i, 1.0))
 
         # Assigning coupled terms, unscaling and rescaling downward direct radiance by local solar zenith angle.
         # Downward diffuse components are scaled by viewable sky fraction (i.e., "ungula" of viewable sky in solid geometry terms).
