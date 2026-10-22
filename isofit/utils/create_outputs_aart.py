@@ -283,10 +283,10 @@ class SnowWorker(object):
         algae_vals = sub_state[..., self.algae_idx]
         lwc_vals = sub_state[..., self.lwc_idx]
 
-        grain_vals = np.clip(grain_vals, c.MIN_GRAIN, c.MAX_GRAIN)
-        dust_vals = np.clip(dust_vals, c.MIN_DUST, c.MAX_DUST)
-        algae_vals = np.clip(algae_vals, c.MIN_ALGAE, c.MAX_ALGAE)
-        lwc_vals = np.clip(lwc_vals,c.MIN_LWC, c.MAX_LWC)
+        grain_vals = np.clip(grain_vals, 30., 100000.)
+        dust_vals = np.clip(dust_vals, 0., 6000.)
+        algae_vals = np.clip(algae_vals, 0., 3e6)
+        lwc_vals = np.clip(lwc_vals, 0., 50.)
 
         output_snow[..., self.fsnow_sidx] = f_snow_vals
         output_snow[..., self.grain_sidx] = grain_vals
