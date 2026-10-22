@@ -253,11 +253,11 @@ class KokhanovskySnowSurface(Surface):
         """
 
         # Ensure optimization stays in bounds
-        x_surface = [max(float(b[0]), min(float(val), float(b[1]))) for val, b in zip(x_surface, self.bounds)]
-        x_surface = np.array(x_surface, dtype=float)
+        x_surface = self.clip_surface(x_surface)
 
         # NOTE For now assuming order like this
         cos_i, grain_radius, lwc, dust_conc, algae_conc = x_surface[:5]
+        cos_i = max(1e-8, min(cos_i, 1.0))
 
         # Update scattering angle
         # NOTE 180 is scattering back, sun behind sensor
@@ -312,6 +312,11 @@ class KokhanovskySnowSurface(Surface):
 
         return rho_dir_dir, rho_dif_dir
 
+    def clip_surface(self, x_surface):
+        x_surface = [max(float(b[0]), min(float(val), float(b[1]))) for val, b in zip(x_surface, self.bounds)]
+        x_surface = np.array(x_surface, dtype=float)
+        return x_surface
+
     def calc_lamb(self, x_surface, geom):
         """Lambertian reflectance."""
         _ , rho_dif = self.calc_rfl(x_surface, geom)
@@ -347,7 +352,8 @@ class KokhanovskySnowSurface(Surface):
     def dlamb_dsurface(self, x_surface, geom):
         """Partial derivative of Lambertian rfl with respect to state vector."""
 
-        x_surface = np.array(x_surface, dtype=float)
+        # Ensure optimization stays in bounds
+        x_surface = self.clip_surface(x_surface)
         dlamb = np.zeros((self.n_wl, self.n_state))
 
         _, grain_radius, lwc, dust_conc, algae_conc = x_surface[:5]
@@ -472,8 +478,9 @@ class KokhanovskySnowSurface(Surface):
         L_dif_dir,
     ):
         """Partial derivative of TOA radiance with respect to cosi."""
-
-        cosi = max(x_surface[self.cos_i_idx], 1e-6)
+        # Ensure optimization stays in bounds
+        cosi = x_surface[self.cos_i_idx]
+        cosi = max(1e-8, min(cosi, 1.0))
         b = 1.0
         t_down_dir = r["transm_down_dir"]
 

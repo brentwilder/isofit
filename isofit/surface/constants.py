@@ -61,9 +61,12 @@ DENSITY_ICE = 917.0
 # Mineral dust constants
 DUST_DENSITY = 2.65 # g cm-3
 
+
 # Grain shape
 G0 = 0.82 # Middle range of Robledano et al. 2023
 #self.B0 = self.r_ice**2 #B=n2 from Robledano et al. 2023
+
+
 
 # R0 and phase function
 P_0 = -1.90946652e+00
@@ -77,6 +80,17 @@ R0_2 = 9.02713485e+00
 # original relation for reference
 #p = 11.1 * np.exp(-0.087 * geom.theta) + 1.1 * np.exp(-0.014 * geom.theta)
 #r0 = (1.247 + 1.186 * (cos_i + geom.cos_v) + 5.157 * cos_i * geom.cos_v + p) / 4.0 / (cos_i + geom.cos_v)
+
+
+# Bounds to be enforced for the albedo lut
+MIN_GRAIN=30.0
+MAX_GRAIN=10000000.0
+MIN_DUST=0.0
+MAX_DUST=6000.0
+MIN_ALGAE=0.0
+MAX_ALAGE=3e6
+MIN_LWC=0.0
+MAX_LWC=50.0
 
 
 def get_dust_optical_properties(input_list):
