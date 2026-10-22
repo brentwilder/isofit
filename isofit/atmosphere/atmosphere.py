@@ -138,7 +138,7 @@ class BaseAtmosphere(Reader):
         self.h2o_name = self.statevec_names[self.h2o_i[0]] if self.h2o_i else None
 
         possible_aerosol_names = ["AOT", "AERFRAC"]
-        self.aerosol_i = [i for i, v in enumerate(self.statevec_names) if v in possible_aerosol_names]
+        self.aerosol_i = [i for i, v in enumerate(self.statevec_names) if any(name in v for name in possible_aerosol_names)]
 
         # Configure and exit flag
         self.configure_and_exit = self.config.configure_and_exit
@@ -357,9 +357,6 @@ class BaseAtmosphere(Reader):
             Logger.error(error)
             raise AttributeError(error)
 
-    def update_heuristic_prior_means(self, x_atmosphere, geom):
-        xa = self.prior_mean.copy()
-        xa[self.h2o_i] = x_atmosphere[self.h2o_i]
 
     def update_heuristic_prior_means(self, x_atmosphere, geom):
         xa = self.prior_mean.copy()
