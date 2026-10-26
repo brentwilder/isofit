@@ -18,7 +18,7 @@
         "scale": 1.0
     },
     "GRAIN_RADIUS": {
-        "bounds": [30.0, 5000.0],
+        "bounds": [30.0, 10000000.0],
         "init": 500.0,
         "prior_mean": 500.0,
         "prior_sigma": 1000000.0,
