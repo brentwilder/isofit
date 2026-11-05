@@ -31,7 +31,7 @@ import numpy as np
 
 from isofit.configs import Config
 from isofit.core import common, units
-from isofit.core.common import json_load_ascii, svd_inv_sqrt, PriorUpdate
+from isofit.core.common import PriorUpdate, json_load_ascii, svd_inv_sqrt
 from isofit.core.geometry import Geometry
 from isofit.luts.reader import Reader
 
@@ -175,8 +175,6 @@ class BaseAtmosphere(Reader):
         )
 
         self.rt_mode = self.config.rt_mode or "transm"
-
-        self.aeronet_prior = full_config.implementation.aeronet_prior
 
         # Use explicitely passed first
         if not any(wl) or not any(fwhm):

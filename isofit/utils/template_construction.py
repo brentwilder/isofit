@@ -767,9 +767,9 @@ def build_config(
         presolve:                             set this up as a presolve configuration
         terrain_style:                        style of terrain to use in the forward model - options are 'flat', 'dem', 'solved'
         max_slope:                            maximum terrain slope, used to inform minimum cos_i if terrain_style is not flat
+        pixel_heuristic_priors:               list of per-pixel prior heuristic types
         use_background_rfl:                   flag to determine which surface derivatives to use in OE
         elevation_km:                         determined mean elevation in km for image used for AOT priors
-        aeronet_prior:                        define prior mean and sigma for AOT 550 as a function of aeronet climatology.
     """
 
     if use_superpixels:
@@ -860,11 +860,11 @@ def build_config(
                 pressure_elevation=pressure_elevation,
                 retrieve_co2=retrieve_co2,
                 heuristic_h2o_prior="H2O" in pixel_heuristic_priors,
+                heuristic_aod_prior="AOD" in pixel_heuristic_priors,
                 relative_azimuth_lut_grid=relative_azimuth_lut_grid,
                 to_sensor_zenith_lut_grid=to_sensor_zenith_lut_grid,
                 to_sun_zenith_lut_grid=to_sun_zenith_lut_grid,
                 elevation_km=elevation_km,
-                aeronet_prior=aeronet_prior,
             ),
             "surface": make_surface_config(
                 surface_class_working_path=paths.surface_class_working_path,
@@ -1062,7 +1062,7 @@ def load_climatology(
     acquisition_datetime: datetime,
     lut_params: LUTConfig,
     elevation_km: float = 0.0,
-    heuristic_aeronet_prior: bool = False,
+    heuristic_aod_prior: bool = False,
 ):
     """Load climatology data, based on location and configuration
 
@@ -1073,7 +1073,7 @@ def load_climatology(
         acquisition_datetime: datetime to use for the segment( mean of acquisition suggested)
         lut_params: parameters to use to define lut grid
         elevation_km: determined mean elevation in km for image used for AOT priors
-        heuristic_aeronet_prior: define prior mean and sigma for AOT 550 as a function of aeronet climatology
+        heuristic_aod_prior: define prior mean and sigma for AOT 550 as a function of aeronet climatology
 
     :Returns
         tuple containing:
@@ -1136,7 +1136,7 @@ def load_climatology(
     if aot_550_lut is not None:
         aerosol_lut_grid["AOT550"] = aot_550_lut.tolist()
         alr = [aerosol_lut_grid["AOT550"][0], aerosol_lut_grid["AOT550"][-1]]
-        if aeronet_prior:
+        if heuristic_aod_prior:
             init_value, prior_sigma = aeronet_model(
                 elevation_km=elevation_km, aot_min=alr[0], aot_max=alr[1]
             )
@@ -1575,12 +1575,11 @@ def make_atmosphere_config(
     pressure_elevation: bool = False,
     retrieve_co2: bool = False,
     heuristic_h2o_prior: bool = False,
-    per_pixel_heuristic_prior: bool = False,
+    heuristic_aod_prior: bool = False,
     relative_azimuth_lut_grid: np.array = None,
     to_sensor_zenith_lut_grid: np.array = None,
     to_sun_zenith_lut_grid: np.array = None,
     elevation_km: float = 0.0,
-    aeronet_prior: bool = False,
     unknowns: dict = {},
     wavelength_file: str = None,
     **kwargs,
@@ -1732,7 +1731,7 @@ def make_atmosphere_config(
                     interp_value = template_means[dim_name]
                     source = "scene mean from template"
                 elif dim_name.startswith("AOT") or dim_name.startswith("AERFRAC"):
-                    if aeronet_prior:
+                    if heuristic_aod_prior:
                         interp_value, _ = aeronet_model(
                             elevation_km=elevation_km,
                             aot_min=vmin,
@@ -1827,7 +1826,7 @@ def make_atmosphere_config(
                         f"invalid value: {heuristic_val}. Treating as interpolation."
                     )
                     if dim_name.startswith("AOT") or dim_name.startswith("AERFRAC"):
-                        if aeronet_prior:
+                        if heuristic_aod_prior:
                             interp_value, _ = aeronet_model(
                                 elevation_km=elevation_km,
                                 aot_min=vmin,
@@ -1853,7 +1852,7 @@ def make_atmosphere_config(
 
     # Now do statevector
     statekeys = ["H2OSTR"]
-    statesigmas = [1.0 if per_pixel_heuristic_prior else 100.0]
+    statesigmas = [1.0 if heuristic_h2o_prior else 100.0]
     statescale = [1]
     if pressure_elevation and presolve is False:
         statekeys.append("surface_elevation_km")
