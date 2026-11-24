@@ -687,34 +687,38 @@ def apply_oe(
     # base not captured in below
     mineral_dust_properties = ["PM2_5", "libya"]
 
+    # b/c template construction does a -1 multiplication
+    lon_for_dust = -1 * mean_longitude
+
     # roughly north america
-    if 7.0 <= mean_latitude <= 85.0 and -170.0 <= mean_longitude <= -50.0:
+    if 7.0 <= mean_latitude <= 85.0 and -170.0 <= lon_for_dust <= -50.0:
         mineral_dust_properties = ["PM10", "arizona"]
 
     # roughly south america
-    elif -60.0 <= mean_latitude < 15.0 and -90.0 <= mean_longitude <= -30.0:
+    elif -60.0 <= mean_latitude < 15.0 and -90.0 <= lon_for_dust <= -30.0:
         mineral_dust_properties = ["PM10", "patagonia"]
 
     # roughly africa
-    elif -35.0 <= mean_latitude <= 38.0 and -20.0 <= mean_longitude <= 55.0:
+    elif -35.0 <= mean_latitude <= 38.0 and -20.0 <= lon_for_dust <= 55.0:
         mineral_dust_properties = ["PM2_5", "libya"]
 
     # roughly western europe
-    elif 35.0 <= mean_latitude <= 75.0 and -25.0 <= mean_longitude <= 45.0:
+    elif 35.0 <= mean_latitude <= 75.0 and -25.0 <= lon_for_dust <= 45.0:
         mineral_dust_properties = ["PM2_5", "libya"]
 
     # roughly eastern europe , west asia
-    elif 5.0 <= mean_latitude <= 55.0 and 55.0 <= mean_longitude <= 100.0:
+    elif 5.0 <= mean_latitude <= 55.0 and 55.0 <= lon_for_dust <= 100.0:
         mineral_dust_properties = ["PM10", "saudi_arabia"]
 
     # roughly east asia
-    elif 15.0 <= mean_latitude <= 80.0 and 100.0 <= mean_longitude <= 180.0:
+    elif 15.0 <= mean_latitude <= 80.0 and 100.0 <= lon_for_dust <= 180.0:
         mineral_dust_properties = ["PM10", "china"]
 
     # new zealand and australia
-    elif -50.0 <= mean_latitude <= -10.0 and 110.0 <= mean_longitude <= 180.0:
+    elif -50.0 <= mean_latitude <= -10.0 and 110.0 <= lon_for_dust <= 180.0:
         mineral_dust_properties = ["PM10", "australia"]
 
+    
 
     config_params = {
         "paths": paths,
